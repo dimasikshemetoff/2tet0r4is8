@@ -1,0 +1,930 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <title>Плитки</title>
+  <style>
+    :root{
+      --cell-size: 40px;
+      --cols: 6;
+      --rows: 12;
+      --gap: 6px;
+      --bg:#071026;
+      --panel:#0f1720;
+      --muted:#9aa4b2;
+      --scale: 1;
+    }
+    *{box-sizing:border-box;font-family:Inter, system-ui, Arial, sans-serif;-webkit-tap-highlight-color:transparent}
+    html,body{height:100%;overflow: hidden; margin:0;background:linear-gradient(180deg,#05060a,#071028);color:#e6eef6;overflow-x:hidden;touch-action:manipulation}
+
+    /* layout */
+    .app{display:flex;gap:16px;align-items:flex-start;justify-content: center; max-width:1100px;margin:12px auto; height: 100vh; transform: scale(var(--scale)); transform-origin: top center;}
+    .board-wrap{background:linear-gradient(180deg,#091025,#071020);padding:12px;border-radius:12px;box-shadow:0 10px 30px rgba(2,6,23,0.6);position:relative}
+
+    /* board grid (visual guide) */
+    .board{position:relative;display:grid;grid-template-columns:repeat(var(--cols),var(--cell-size));grid-template-rows:repeat(var(--rows),var(--cell-size));gap:var(--gap);background:#061225;padding:12px;border-radius:10px;min-height:calc(var(--rows) * var(--cell-size) + (var(--rows)-1)*var(--gap));overflow:hidden}
+
+    /* static cell background to keep grid look */
+    .cell-bg{width:var(--cell-size);height:var(--cell-size);border-radius:8px;background:rgba(255,255,255,0.02);box-shadow:inset 0 -3px rgba(0,0,0,0.2)}
+
+    /* floating tile elements for animation */
+    .tile-el{position:absolute;width:var(--cell-size);height:var(--cell-size);display:flex;align-items:center;justify-content:center;border-radius:8px;font-weight:800;transition:transform 220ms cubic-bezier(.2,.9,.2,1), top 220ms cubic-bezier(.2,.9,.2,1), left 220ms cubic-bezier(.2,.9,.2,1);box-shadow:0 6px 18px rgba(2,6,23,0.6);pointer-events:none}
+    .tile-el .label{transform:translateY(1px)}
+
+    /* merge animation */
+    .merge-anim{animation:mergePop 320ms ease forwards}
+    @keyframes mergePop{0%{transform:scale(1)}40%{transform:scale(1.6)}100%{transform:scale(1)}}
+
+    /* particle (star) */
+    .particle{position:absolute;width:10px;height:10px;border-radius:50%;background:gold;box-shadow:0 0 8px gold, 0 0 20px rgba(255,200,50,0.6);pointer-events:none;opacity:0}
+    @keyframes starFly{
+      0%{opacity:1;transform:translate(0,0) scale(1)}
+      60%{opacity:1}
+      100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(0.6)}
+    }
+
+    /* praise text */
+    .praise{position:absolute;font-weight:800;color:#fff;text-shadow:0 4px 16px rgba(0,0,0,0.6);pointer-events:none;opacity:0;transform:translateY(0);transition:transform 480ms cubic-bezier(.2,.9,.2,1),opacity 480ms}
+    .praise.show{opacity:1;transform:translateY(-40px)}
+
+    /* combo text */
+    .combo{position:absolute;font-weight:900;color:#ffd86b;text-shadow:0 6px 18px rgba(0,0,0,0.6);pointer-events:none;opacity:0;transform:translateY(0);transition:transform 420ms cubic-bezier(.2,.9,.2,1),opacity 420ms;font-size:20px}
+    .combo.show{opacity:1;transform:translateY(-36px) scale(1.05)}
+
+    /* new record notification */
+    .new-record{position:absolute;top:50%;left:50%;transform:translate(-50%, -50%);font-weight:900;color:#ffd86b;font-size:28px;text-shadow:0 6px 18px rgba(0,0,0,0.6);pointer-events:none;opacity:0;z-index:50;transition:transform 480ms cubic-bezier(.2,.9,.2,1),opacity 480ms}
+    .new-record.show{opacity:1;transform:translate(-50%, -50%) scale(1.1)}
+
+    /* tile colors (use data-val attribute) */
+    .tile-el[data-val="2"]{background:linear-gradient(180deg,#f1efe9,#efe8d6);color:#2b2b2b}
+    .tile-el[data-val="4"]{background:linear-gradient(180deg,#f3e7d7,#f0d8b7);color:#2b2b2b}
+    .tile-el[data-val="8"]{background:linear-gradient(180deg,#f7cf95,#f0b46b);color:#111}
+    .tile-el[data-val="16"]{background:linear-gradient(180deg,#f09e5b,#e67a3b);color:#fff}
+    .tile-el[data-val="32"]{background:linear-gradient(180deg,#e86e4b,#c94c2f);color:#fff}
+    .tile-el[data-val="64"]{background:linear-gradient(180deg,#d44c8a,#b7306f);color:#fff}
+    .tile-el[data-val="128"]{background:linear-gradient(180deg,#6db7f7,#3b8fe8);color:#fff}
+    .tile-el[data-val="256"]{background:linear-gradient(180deg,#74d7b2,#2db386);color:#042018}
+    .tile-el[data-val="512"]{background:linear-gradient(180deg,#a293ff,#7a5dff);color:#fff}
+    .tile-el[data-val="1024"]{background:linear-gradient(180deg,#ffd86b,#ffb84f);color:#111}
+    .tile-el[data-val="2048"]{background:linear-gradient(180deg,#ffe0a9,#ffd676);color:#111}
+
+    /* side panel */
+    .side{display:flex;flex-direction:column;gap:12px;width:260px}
+    .panel{background:var(--panel);padding:12px;border-radius:8px;box-shadow:inset 0 -4px rgba(0,0,0,.25)}
+    .title{font-size:18px;font-weight:700;margin-bottom:6px}
+    .stat{font-size:13px;color:var(--muted)}
+    button{padding:10px;border-radius:8px;border:0;background:#0f1726;color:#dfe9f8;cursor:pointer}
+    button.secondary{background:#121827;color:var(--muted)}
+    .next-piece{display:grid;grid-template-columns:repeat(4,40px);grid-auto-rows:40px;gap:6px;justify-content:center}
+    .footer{font-size:13px;color:var(--muted);margin-top:8px}
+    .controls-list{font-size:13px;color:var(--muted);display:block;line-height:1.6}
+    .hint{font-size:13px;color:#bcd0ff}
+    .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:100}
+    .overlay.show{display:flex}
+    .modal{background:#0c1320;padding:24px;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,0.6);max-width:90vw;max-height:90vh;overflow:auto}
+    .small{font-size:12px;color:var(--muted)}
+    
+    /* Sound toggle button */
+    .sound-toggle {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(15, 23, 38, 0.8);
+      border: none;
+      color: #dfe9f8;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      z-index: 10;
+      transition: background 0.2s;
+    }
+    .sound-toggle:hover {
+      background: rgba(15, 23, 38, 1);
+    }
+    .sound-toggle.muted {
+      opacity: 0.5;
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 620px), (max-height: 615px) {
+      .app {
+        margin: 0;
+        gap: 8px;
+      }
+      .side {
+        width: 200px;
+      }
+      .panel {
+        padding: 8px;
+      }
+      .title {
+        font-size: 16px;
+      }
+      .stat {
+        font-size: 12px;
+      }
+      button {
+        padding: 8px;
+        font-size: 14px;
+      }
+      .next-piece {
+        grid-template-columns: repeat(4, 30px);
+        grid-auto-rows: 30px;
+        gap: 4px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="side">
+      <div class="panel">
+        <div class="stat">Счёт: <span id="score">0</span></div>
+        <div class="stat">Рекорд: <span id="best">0</span></div>
+        <div style="height:8px"></div>
+        <button id="restart">Новая игра</button>
+        <button id="leaderboard">Таблица лидеров</button>
+      </div>
+      <div class="panel">
+        <div class="small">Следующая фигура:</div>
+        <div class="next-piece" id="nextPiece"></div>
+      </div>
+    </div>
+
+    <div class="board-wrap">
+      <button class="sound-toggle" id="soundToggle" title="Включить/выключить звук">🔊</button>
+      <div class="board" id="board" aria-label="Игровое поле">
+        <div class="new-record" id="newRecord">НОВЫЙ РЕКОРД!</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
+
+<script>
+(() => {
+  // CONFIG
+  const COLS = 6;
+  const ROWS = 12;
+  const TICK_START = 700;
+  const MIN_TICK = 100;
+  const SETTLE_MS = 140; // small delay before locking to avoid instant snap bug
+
+  const boardEl = document.getElementById('board');
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const nextEl = document.getElementById('nextPiece');
+  const overlay = document.getElementById('overlay');
+  const modal = document.getElementById('modal');
+  const newRecordEl = document.getElementById('newRecord');
+  const appEl = document.querySelector('.app');
+  const soundToggleEl = document.getElementById('soundToggle');
+
+  let grid = [];
+  let current = null;
+  let nextPiece = null;
+  let tick = TICK_START;
+  let timer = null;
+  let score = 0;
+  let best = Number(localStorage.getItem('tetris2048_best') || 0);
+  let paused = false;
+  let settleTimer = null;
+  let tileLayer = null; // will be created and appended inside createBoard
+  let newRecordShown = false; // flag to prevent showing new record multiple times
+  let newRecordSoundPlayed = false; // flag to prevent playing new record sound multiple times
+  let comboChain = 0; // track consecutive merges
+  let justPlacedBlocks = []; // track blocks that were just placed
+
+  bestEl.textContent = best;
+
+  // Responsive scaling function
+  function updateScale() {
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    const maxWidth = 620;
+    const maxHeight = 615;
+    const minSize = 320;
+    
+    // Only apply scaling if window is smaller than max dimensions
+    if (windowWidth < maxWidth || windowHeight < maxHeight) {
+      // Calculate scale based on the smaller dimension
+      const scaleX = Math.max(minSize / maxWidth, windowWidth / maxWidth);
+      const scaleY = Math.max(minSize / maxHeight, windowHeight / maxHeight);
+      const scale = Math.min(scaleX, scaleY);
+      
+      // Apply scale to CSS variable
+      document.documentElement.style.setProperty('--scale', scale);
+    } else {
+      // Reset scale to 1 if window is large enough
+      document.documentElement.style.setProperty('--scale', 1);
+    }
+  }
+
+  // Initial scale calculation
+  updateScale();
+  
+  // Update scale on window resize
+  window.addEventListener('resize', updateScale);
+
+  // WebAudio API Sound System
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  const sounds = {};
+  let soundEnabled = true;
+  let bgMusicSource = null;
+  let bgMusicGainNode = null;
+  
+  // Загрузка звуков
+  function loadSounds() {
+    // Список необходимых звуков:
+    // 1. move.mp3 - звук перемещения фигуры
+    // 2. rotate.mp3 - звук вращения фигуры
+    // 3. drop.mp3 - звук падения фигуры
+    // 4. merge.mp3 - звук слияния плиток
+    // 5. combo.mp3 - звук комбо
+    // 6. megacombo.mp3 - звук мега-комбо (для комбо > 4)
+    // 7. gameover.mp3 - звук окончания игры
+    // 8. newrecord.mp3 - звук нового рекорда
+    // 9. background.mp3 - фоновая музыка
+    
+    // Загружаем звуки
+    loadSound('move.mp3').then(sound => { sounds.move = sound; });
+    loadSound('rotate.mp3').then(sound => { sounds.rotate = sound; });
+    loadSound('drop.mp3').then(sound => { sounds.drop = sound; });
+    loadSound('merge.mp3').then(sound => { sounds.merge = sound; });
+    loadSound('combo.mp3').then(sound => { sounds.combo = sound; });
+    loadSound('megacombo.mp3').then(sound => { sounds.megacombo = sound; });
+    loadSound('gameover.mp3').then(sound => { sounds.gameover = sound; });
+    loadSound('newrecord.mp3').then(sound => { sounds.newrecord = sound; });
+    loadSound('background.mp3').then(sound => { sounds.background = sound; });
+    
+    // Создаем пустые функции для звуков, чтобы избежать ошибок до их загрузки
+    sounds.move = () => {};
+    sounds.rotate = () => {};
+    sounds.drop = () => {};
+    sounds.merge = () => {};
+    sounds.combo = () => {};
+    sounds.megacombo = () => {};
+    sounds.gameover = () => {};
+    sounds.newrecord = () => {};
+    sounds.background = () => {};
+  }
+  
+  // Функция для загрузки звука
+  function loadSound(url) {
+    return fetch(url)
+      .then(response => response.arrayBuffer())
+      .then(arrayBuffer => audioContext.decodeAudioData(arrayBuffer))
+      .then(audioBuffer => {
+        return () => {
+          if (!soundEnabled) return;
+          
+          const source = audioContext.createBufferSource();
+          source.buffer = audioBuffer;
+          
+          // Создаем узел громкости для контроля звука
+          const gainNode = audioContext.createGain();
+          gainNode.gain.value = 0.7; // Устанавливаем громкость по умолчанию
+          
+          source.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+          source.start();
+        };
+      })
+      .catch(error => {
+        console.error('Error loading sound:', error);
+        return () => {}; // Возвращаем пустую функцию в случае ошибки
+      });
+  }
+  
+  // Воспроизведение звука
+  function playSound(soundName) {
+    if (sounds[soundName]) {
+      sounds[soundName]();
+    }
+  }
+  
+  // Воспроизведение фоновой музыки в цикле
+  function playBackgroundMusic() {
+    if (!soundEnabled || !sounds.background) return;
+    
+    // Останавливаем предыдущую музыку, если она есть
+    stopBackgroundMusic();
+    
+    // Создаем узел громкости для фоновой музыки
+    bgMusicGainNode = audioContext.createGain();
+    bgMusicGainNode.gain.value = 0.3; // Фоновая музыка должна быть тише
+    
+    // Загружаем и воспроизводим фоновую музыку
+    fetch('background.mp3')
+      .then(response => response.arrayBuffer())
+      .then(arrayBuffer => audioContext.decodeAudioData(arrayBuffer))
+      .then(audioBuffer => {
+        bgMusicSource = audioContext.createBufferSource();
+        bgMusicSource.buffer = audioBuffer;
+        bgMusicSource.loop = true; // Зацикливаем музыку
+        bgMusicSource.connect(bgMusicGainNode);
+        bgMusicGainNode.connect(audioContext.destination);
+        bgMusicSource.start(0);
+      })
+      .catch(error => {
+        console.error('Error loading background music:', error);
+      });
+  }
+  
+  // Остановка фоновой музыки
+  function stopBackgroundMusic() {
+    if (bgMusicSource) {
+      bgMusicSource.stop();
+      bgMusicSource = null;
+    }
+  }
+  
+  // Переключение звука
+  function toggleSound() {
+    soundEnabled = !soundEnabled;
+    soundToggleEl.textContent = soundEnabled ? '🔊' : '🔇';
+    soundToggleEl.classList.toggle('muted', !soundEnabled);
+    
+    if (soundEnabled) {
+      playBackgroundMusic();
+    } else {
+      stopBackgroundMusic();
+    }
+  }
+  
+  // Обработчик кнопки переключения звука
+  soundToggleEl.addEventListener('click', toggleSound);
+  
+  // Инициализация звуковой системы
+  loadSounds();
+
+  // shapes
+  const SHAPES = {
+    I: [[0,1],[1,1],[2,1],[3,1]],
+    O: [[0,0],[1,0],[0,1],[1,1]],
+    T: [[0,1],[1,1],[2,1],[1,0]],
+    L: [[0,0],[0,1],[0,2],[1,2]],
+    J: [[1,0],[1,1],[1,2],[0,2]],
+    S: [[0,1],[1,1],[1,0],[2,0]],
+    Z: [[0,0],[1,0],[1,1],[2,1]]
+  };
+  const SHAPE_KEYS = Object.keys(SHAPES);
+
+  // DOM helpers: grid background cells
+  function createBoard(){
+    boardEl.style.setProperty('--cols', COLS);
+    boardEl.style.setProperty('--rows', ROWS);
+    boardEl.innerHTML = '<div class="new-record" id="newRecord">НОВЫЙ РЕКОРД!</div>';
+    for (let r=0;r<ROWS;r++){
+      for (let c=0;c<COLS;c++){
+        const bg = document.createElement('div');
+        bg.className = 'cell-bg';
+        bg.dataset.r = r; bg.dataset.c = c;
+        boardEl.appendChild(bg);
+      }
+    }
+    // create/attach tileLayer for absolute positioned animated tiles
+    if (!tileLayer){
+      tileLayer = document.createElement('div');
+      tileLayer.style.position = 'absolute';
+      tileLayer.style.inset = '12px';
+      tileLayer.style.pointerEvents = 'none';
+    }
+    tileLayer.innerHTML = '';
+    boardEl.appendChild(tileLayer);
+  }
+
+  function resetGrid(){ grid = Array.from({length:ROWS},()=>Array(COLS).fill(0)); }
+
+  function randInitialValue(){ const r = Math.random(); if (r<0.7) return 2; if (r<0.95) return 4; return 8; }
+
+  function makePiece(shapeKey=null){
+    const key = shapeKey || SHAPE_KEYS[Math.floor(Math.random()*SHAPE_KEYS.length)];
+    const blocks = SHAPES[key].map(p=>({x:p[0], y:p[1], v: randInitialValue()}));
+    const minX = Math.min(...blocks.map(b=>b.x));
+    const maxX = Math.max(...blocks.map(b=>b.x));
+    const width = maxX-minX+1;
+    const offsetX = Math.floor((COLS-width)/2) - minX;
+    const offsetY = -Math.max(...blocks.map(b=>b.y)) - 1;
+    return {blocks, x:offsetX, y:offsetY, key};
+  }
+
+  function cellMetrics(){
+    const style = getComputedStyle(document.documentElement);
+    const cell = parseFloat(style.getPropertyValue('--cell-size')) ;
+    const gap = parseFloat(style.getPropertyValue('--gap'));
+    const padding = 12; // board padding
+    return {cell, gap, padding};
+  }
+
+  // Manage tile elements by id key 'r-c' for grid, and 'cur-i' for current moving
+  function ensureTile(id, val){
+    if (!tileLayer) return null;
+    let el = tileLayer.querySelector(`[data-id='${id}']`);
+    if (!el){
+      el = document.createElement('div');
+      el.className = 'tile-el';
+      el.setAttribute('data-id', id);
+      el.innerHTML = `<div class='label'></div>`;
+      tileLayer.appendChild(el);
+    }
+    el.setAttribute('data-val', val);
+    el.querySelector('.label').textContent = val;
+    return el;
+  }
+
+  function removeTile(id){ if (!tileLayer) return; const el = tileLayer.querySelector(`[data-id='${id}']`); if (el) el.remove(); }
+
+  // Draw function: update tiles to reflect grid + current piece
+  function draw(){
+    const {cell,gap,padding} = cellMetrics();
+    const tileIds = new Set();
+
+    if (!tileLayer) return;
+
+    // draw grid
+    for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++){
+      const v = grid[r][c];
+      const id = `g-${r}-${c}`;
+      if (v){
+        const el = ensureTile(id, v);
+        if (!el) continue;
+        tileIds.add(id);
+        const left = c*(cell+gap);
+        const top = r*(cell+gap);
+        el.style.left = `${left}px`;
+        el.style.top = `${top}px`;
+        el.style.width = `${cell}px`;
+        el.style.height = `${cell}px`;
+      } else {
+        removeTile(id);
+      }
+    }
+
+    // draw current piece
+    if (current){
+      current.blocks.forEach((b, idx)=>{
+        const r = current.y + b.y;
+        const c = current.x + b.x;
+        const id = `cur-${idx}`;
+        const val = b.v;
+        const el = ensureTile(id, val);
+        if (!el) return;
+        tileIds.add(id);
+        const left = c*(cell+gap);
+        const top = r*(cell+gap);
+        el.style.left = `${left}px`;
+        el.style.top = `${top}px`;
+        el.style.width = `${cell}px`;
+        el.style.height = `${cell}px`;
+      });
+    } else {
+      // remove any cur-* tiles that remained
+      tileLayer.querySelectorAll('[data-id^="cur-"]').forEach(e=>e.remove());
+    }
+
+    // cleanup orphan tiles
+    tileLayer.querySelectorAll('[data-id]').forEach(el=>{
+      const id = el.getAttribute('data-id');
+      if (!tileIds.has(id)) el.remove();
+    });
+  }
+
+  // Next preview (simple grid cells)
+  function drawNext(){
+    nextEl.innerHTML = '';
+    for (let i=0;i<16;i++){ const d = document.createElement('div'); d.className='cell-bg'; nextEl.appendChild(d);}    
+    if (!nextPiece) return;
+    nextPiece.blocks.forEach(b=>{
+      const r = b.y + 1; const c = b.x + 1; const idx = r*4 + c;
+      if (idx>=0 && idx<nextEl.children.length){
+        const el = nextEl.children[idx];
+        el.className = '';
+        el.style.borderRadius='8px';
+        el.textContent = b.v; el.style.fontWeight = 800; el.style.display='flex'; el.style.alignItems='center'; el.style.justifyContent='center';
+        el.style.background = getComputedStyle(document.documentElement).getPropertyValue('--bg');
+      }
+    });
+  }
+
+  function collides(x,y,blocks){
+    for (const b of blocks){
+      const r = y + b.y;
+      const c = x + b.x;
+      if (c<0 || c>=COLS) return true;
+      if (r>=ROWS) return true;
+      if (r>=0 && grid[r][c]) return true;
+    }
+    return false;
+  }
+
+  function move(dx, dy, playMoveSound = false){
+    if (!current) return false;
+    if (!collides(current.x + dx, current.y + dy, current.blocks)){
+      current.x += dx; current.y += dy; 
+      if (playMoveSound) {
+        playSound('move'); // Воспроизводим звук перемещения только если указано
+      }
+      draw(); 
+      return true;
+    }
+    return false;
+  }
+
+  function rotate(){
+    if (!current) return;
+    const newBlocks = current.blocks.map(b=>({x: b.y, y: -b.x, v: b.v}));
+    const minX = Math.min(...newBlocks.map(b=>b.x));
+    const minY = Math.min(...newBlocks.map(b=>b.y));
+    newBlocks.forEach(b=>{ b.x -= minX; b.y -= minY; });
+    if (!collides(current.x, current.y, newBlocks)){
+      current.blocks = newBlocks; 
+      playSound('rotate'); // Воспроизводим звук вращения
+      draw();
+    } else {
+      if (!collides(current.x-1, current.y, newBlocks)) { current.x -=1; current.blocks=newBlocks; draw(); }
+      else if (!collides(current.x+1, current.y, newBlocks)) { current.x +=1; current.blocks=newBlocks; draw(); }
+    }
+  }
+
+  function hardDrop(){
+    if (!current) return;
+    while(move(0,1, false)){}
+    playSound('drop'); // Воспроизводим звук падения
+    lockPiece();
+  }
+
+  // Новая механика слияния: ищем цепочки одинаковых плиток по всему полю
+  function processMerges(){
+    let anyMerged = false;
+    const anims = [];
+    const visited = Array.from({length:ROWS},()=>Array(COLS).fill(false));
+    
+    // Проверяем все ячейки на поле, а не только недавно размещенные
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (visited[r][c] || !grid[r][c]) continue;
+        
+        const val = grid[r][c];
+        const component = [];
+        
+        // Поиск в ширину для нахождения всех связанных плиток того же значения
+        const queue = [[r, c]];
+        visited[r][c] = true;
+        
+        while (queue.length > 0) {
+          const [cr, cc] = queue.shift();
+          component.push([cr, cc]);
+          
+          // Проверяем соседние клетки
+          const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+          for (const [dr, dc] of dirs) {
+            const nr = cr + dr;
+            const nc = cc + dc;
+            
+            if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
+            if (visited[nr][nc] || grid[nr][nc] !== val) continue;
+            
+            visited[nr][nc] = true;
+            queue.push([nr, nc]);
+          }
+        }
+        
+        // Если компонент содержит 2 или более плиток, выполняем слияние
+        if (component.length >= 2) {
+          anyMerged = true;
+          
+          // Определяем множитель в зависимости от количества плиток
+          let multiplier;
+          if (component.length === 2) {
+            multiplier = 2; // 2 плитки -> умножение на 2
+          } else if (component.length === 3) {
+            multiplier = 2; // 3 плитки -> тоже умножение на 2
+          } else {
+            multiplier = 4; // 4+ плиток -> умножение на 4
+          }
+          
+          const mergedVal = val * multiplier;
+          
+          // Находим позицию для слияния ближе к центру поля
+          const centerCol = Math.floor(COLS / 2);
+          component.sort((a, b) => {
+            // Сортируем по расстоянию до центра, затем по высоте (выше приоритет)
+            const distA = Math.abs(a[1] - centerCol);
+            const distB = Math.abs(b[1] - centerCol);
+            if (distA !== distB) return distA - distB;
+            return a[0] - b[0]; // Чем выше, тем лучше
+          });
+          
+          // Очищаем все клетки компонента
+          for (const [cr, cc] of component) {
+            grid[cr][cc] = 0;
+          }
+          
+          // Размещаем объединенную плитку в ближайшей к центру позиции
+          const [mr, mc] = component[0];
+          grid[mr][mc] = mergedVal;
+          
+          // Обновляем счет
+          score += mergedVal;
+          updateScoreAndLevel();
+          
+          // Добавляем анимацию
+          anims.push({r: mr, c: mc, val: mergedVal, size: component.length});
+          playSound('merge');
+        }
+      }
+    }
+    
+    return {anyMerged, anims};
+  }
+
+  function applyGravity(){
+    for (let c=0;c<COLS;c++){
+      let write = ROWS-1;
+      for (let r=ROWS-1;r>=0;r--){
+        if (grid[r][c]){
+          if (r !== write){ grid[write][c] = grid[r][c]; grid[r][c] = 0; }
+          write--;
+        }
+      }
+    }
+  }
+
+  // animate merges: pop, spawn particles, show praise
+  function animateMerges(anims){
+    if (!anims || anims.length===0) return;
+    const {cell,gap} = cellMetrics();
+    for (const a of anims){
+      const id = `g-${a.r}-${a.c}`;
+      const el = tileLayer.querySelector(`[data-id='${id}']`);
+      if (el){
+        el.classList.add('merge-anim');
+        setTimeout(()=>el.classList.remove('merge-anim'), 520);
+      }
+      // spawn particles
+      const originLeft = a.c*(cell+gap) + cell/2;
+      const originTop = a.r*(cell+gap) + cell/2;
+      spawnParticles(originLeft, originTop, Math.min(12, 3 + Math.floor(a.size/2)));
+      // show praise
+      const praise = choosePraise(a.val, a.size);
+      showPraise(praise, originLeft, originTop);
+    }
+  }
+
+  function spawnParticles(x,y,count){
+    for (let i=0;i<count;i++){
+      const p = document.createElement('div');
+      p.className = 'particle';
+      p.style.left = `${x - 5}px`;
+      p.style.top = `${y - 5}px`;
+      // random direction
+      const angle = (Math.random()*Math.PI*2);
+      const dist = 40 + Math.random()*40;
+      const dx = Math.cos(angle)*dist + 'px';
+      const dy = Math.sin(angle)*dist - 20 + 'px';
+      p.style.setProperty('--dx', dx);
+      p.style.setProperty('--dy', dy);
+      const dur = 700 + Math.random()*300;
+      p.style.animation = `starFly ${dur}ms cubic-bezier(.2,.9,.2,1) forwards`;
+      tileLayer.appendChild(p);
+      // remove after animation
+      setTimeout(()=>{ p.remove(); }, dur + 50);
+    }
+  }
+
+  function choosePraise(val, size){
+    // bigger merges get stronger praise
+    if (val >= 1024) return 'БОМБЕЗНО!';
+    if (val >= 512) return 'Потрясающе!';
+    if (val >= 128) return 'Великолепно!';
+    if (size >= 4) return 'Отлично!';
+    if (size >= 3) return 'Хорошо!';
+    return 'Супер!';
+  }
+
+  function showPraise(text, x, y){
+    const p = document.createElement('div');
+    p.className = 'praise';
+    p.textContent = text;
+    // position relative to tileLayer
+    p.style.left = `${x}px`;
+    p.style.top = `${y}px`;
+    tileLayer.appendChild(p);
+    // force reflow then show
+    requestAnimationFrame(()=>{ p.classList.add('show'); });
+    setTimeout(()=>{ p.classList.remove('show'); setTimeout(()=>p.remove(),500); }, 1200);
+  }
+
+  function showCombo(count, x, y){
+    if (count <= 1) return;
+    
+    // Воспроизводим разные звуки в зависимости от размера комбо
+    if (count > 4) {
+      playSound('megacombo'); // Воспроизводим звук мега-комбо
+    } else {
+      playSound('combo'); // Воспроизводим обычный звук комбо
+    }
+    
+    const p = document.createElement('div');
+    p.className = 'combo';
+    p.textContent = `КОМБО x${count}`;
+    p.style.left = `${x}px`;
+    p.style.top = `${y - 20}px`;
+    tileLayer.appendChild(p);
+    requestAnimationFrame(()=>{ p.classList.add('show'); });
+    setTimeout(()=>{ p.classList.remove('show'); setTimeout(()=>p.remove(),400); }, 1000);
+  }
+
+  function showNewRecord() {
+    if (newRecordShown) return;
+    newRecordShown = true;
+    
+    // Воспроизводим звук нового рекорда только если он еще не был воспроизведен на этом уровне
+    if (!newRecordSoundPlayed) {
+      playSound('newrecord'); // Воспроизводим звук нового рекорда
+      newRecordSoundPlayed = true;
+    }
+    
+    const newRecordEl = document.getElementById('newRecord');
+    newRecordEl.classList.add('show');
+    setTimeout(() => {
+      newRecordEl.classList.remove('show');
+      newRecordShown = false;
+    }, 3000);
+  }
+
+  function lockPiece(){
+    if (!current) return;
+    
+    // Очищаем список только что упавших блоков
+    justPlacedBlocks = [];
+    
+    // place into grid
+    for (const b of current.blocks){
+      const r = current.y + b.y; 
+      const c = current.x + b.x;
+      if (r<0) { return gameOver(); }
+      grid[r][c] = b.v;
+      // Добавляем позицию только что упавшей плитки
+      justPlacedBlocks.push([r, c]);
+    }
+
+    // Immediately apply gravity so any parts of the just-placed figure that are unsupported fall down.
+    // This ensures pieces' floating blocks drop to rest before merges are processed.
+    applyGravity();
+    draw();
+
+    current = null;
+    // reset combo chain for this lock
+    comboChain = 0;
+
+    // process merges until no more
+    let loop = 0;
+    function doMerges(){
+      loop++;
+      const res = processMerges();
+      if (res.anyMerged){
+        comboChain++;
+        // draw merged state (with merged tiles placed)
+        draw();
+        // animate merged tiles + particles + praise
+        animateMerges(res.anims);
+        // show combo indicator near first merged tile
+        if (res.anims && res.anims.length) {
+          const a = res.anims[0];
+          const {cell,gap} = cellMetrics();
+          const originLeft = a.c*(cell+gap) + cell/2;
+          const originTop = a.r*(cell+gap) + cell/2;
+          showCombo(comboChain, originLeft, originTop);
+        }
+        // after animation, apply gravity and continue merging
+        setTimeout(()=>{
+          applyGravity();
+          draw();
+          setTimeout(()=>{ if (loop<10) doMerges(); }, 220);
+        }, 420);
+      } else {
+        // small reward text if combo happened
+        if (comboChain > 1){
+          // show an extra praise for combos
+          const centerX = (COLS/2) * (cellMetrics().cell + cellMetrics().gap);
+          const centerY = (ROWS/3) * (cellMetrics().cell + cellMetrics().gap);
+          showPraise(comboChain >= 4 ? 'КОМБО-МАСТЕР!' : 'Классический комбо!', centerX, centerY);
+        }
+        // spawn next after merges complete
+        spawnNext();
+      }
+    }
+    setTimeout(doMerges, 80);
+  }
+
+  function spawnNext(){
+    if (!nextPiece) nextPiece = makePiece();
+    current = {blocks: nextPiece.blocks.map(b=>({x:b.x,y:b.y,v:b.v})), x: nextPiece.x, y: nextPiece.y, key: nextPiece.key};
+    nextPiece = makePiece();
+    drawNext();
+    draw();
+    // if immediately collides -> game over
+    if (collides(current.x, current.y, current.blocks)){
+      gameOver();
+    }
+  }
+
+  function updateScoreAndLevel(){
+    scoreEl.textContent = score;
+    restartTimer();
+    if (score > best){ 
+      best = score; 
+      bestEl.textContent = best; 
+      localStorage.setItem('tetris2048_best', best); 
+      showNewRecord();
+    }
+  }
+
+  function step(){
+    if (paused) return;
+    if (!current) return;
+    // try move down without playing sound
+    if (move(0,1, false)){
+      // cancel settle if moving
+      if (settleTimer){ clearTimeout(settleTimer); settleTimer = null; }
+      draw();
+    } else {
+      // cannot move down -> start settle timer to avoid immediate snap bug
+      if (!settleTimer){
+        settleTimer = setTimeout(()=>{ 
+          settleTimer = null; 
+          lockPiece(); 
+        }, SETTLE_MS);
+      }
+    }
+  }
+
+  function restartTimer(){ 
+    if (timer) clearInterval(timer); 
+    timer = setInterval(step, tick); 
+  }
+
+  function startGame(){ 
+    resetGrid(); 
+    createBoard(); 
+    draw(); 
+    score = 0; 
+    tick = TICK_START; 
+    paused = false; 
+    current = null; 
+    nextPiece = null; 
+    justPlacedBlocks = []; // Очищаем список только что упавших блоков
+    newRecordShown = false;
+    newRecordSoundPlayed = false; // Сбрасываем флаг звука нового рекорда
+    spawnNext(); 
+    scoreEl.textContent='0'; 
+    restartTimer(); 
+    overlay.classList.remove('show'); 
+    playBackgroundMusic(); // Запускаем фоновую музыку
+  }
+
+  function gameOver(){ 
+    clearInterval(timer); 
+    current = null; 
+    draw(); 
+    playSound('gameover'); // Воспроизводим звук окончания игры
+    stopBackgroundMusic(); // Останавливаем фоновую музыку
+    modal.innerHTML = `<div style="font-size:18px;font-weight:700;margin-bottom:8px">Конец игры</div><div class="small">Счёт: ${score}</div><div style="height:10px"></div><div style="display:flex;gap:8px"><button id=again>Играть ещё</button><button id=close class='secondary'>Закрыть</button></div>`; 
+    overlay.classList.add('show'); 
+    document.getElementById('again').onclick = ()=>{ overlay.classList.remove('show'); startGame(); }; 
+    document.getElementById('close').onclick = ()=>{ overlay.classList.remove('show'); } 
+  }
+
+  // input
+  document.addEventListener('keydown', e=>{
+    if (e.repeat) return;
+    if (e.key === 'ArrowLeft'){ move(-1,0, true); draw(); e.preventDefault(); }
+    else if (e.key === 'ArrowRight'){ move(1,0, true); draw(); e.preventDefault(); }
+    else if (e.key === 'ArrowDown'){ move(0,1, true); draw(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp'){ rotate(); draw(); e.preventDefault(); }
+    else if (e.code === 'Space'){ hardDrop(); e.preventDefault(); }
+    else if (e.key.toLowerCase() === 'p'){ paused = !paused; if (paused) { clearInterval(timer);} else { restartTimer(); } }
+  });
+
+  // safe UI buttons
+  (function(){ const restartBtn = document.getElementById('restart'); if (restartBtn) restartBtn.addEventListener('click', ()=>startGame()); })();
+
+  // initialization
+  resetGrid(); 
+  createBoard(); 
+  nextPiece = makePiece(); 
+  drawNext(); 
+  startGame();
+
+})();
+</script>
+</body>
+</html>
