@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
   <title>Плитки</title>
+
+  <script src="/sdk.js"></script>
   <style>
     :root{
       --cell-size: 40px;
@@ -16,14 +18,14 @@
       --scale: 1;
     }
     *{box-sizing:border-box;font-family:Inter, system-ui, Arial, sans-serif;-webkit-tap-highlight-color:transparent}
-    html,body{height:100%;overflow: hidden; margin:0;background:linear-gradient(180deg,#05060a,#071028);color:#e6eef6;overflow-x:hidden;touch-action:manipulation}
+    html,body{height:100%;overflow: hidden; margin:0;background-image:url('background.jpg');background-size:cover;background-position:center;color:#e6eef6;overflow-x:hidden;touch-action:manipulation}
 
     /* layout */
     .app{display:flex;gap:16px;align-items:flex-start;justify-content: center; max-width:1100px;margin:12px auto; height: 100vh; transform: scale(var(--scale)); transform-origin: top center;}
-    .board-wrap{background:linear-gradient(180deg,#091025,#071020);padding:12px;border-radius:12px;box-shadow:0 10px 30px rgba(2,6,23,0.6);position:relative}
+    .board-wrap{background:linear-gradient(180deg,rgba(9,16,37,0.9),rgba(7,16,32,0.9));padding:12px;border-radius:12px;box-shadow:0 10px 30px rgba(2,6,23,0.6);position:relative}
 
     /* board grid (visual guide) */
-    .board{position:relative;display:grid;grid-template-columns:repeat(var(--cols),var(--cell-size));grid-template-rows:repeat(var(--rows),var(--cell-size));gap:var(--gap);background:#061225;padding:12px;border-radius:10px;min-height:calc(var(--rows) * var(--cell-size) + (var(--rows)-1)*var(--gap));overflow:hidden}
+    .board{position:relative;display:grid;grid-template-columns:repeat(var(--cols),var(--cell-size));grid-template-rows:repeat(var(--rows),var(--cell-size));gap:var(--gap);background:rgba(6,18,37,0.9);padding:12px;border-radius:10px;min-height:calc(var(--rows) * var(--cell-size) + (var(--rows)-1)*var(--gap));overflow:hidden}
 
     /* static cell background to keep grid look */
     .cell-bg{width:var(--cell-size);height:var(--cell-size);border-radius:8px;background:rgba(255,255,255,0.02);box-shadow:inset 0 -3px rgba(0,0,0,0.2)}
@@ -168,6 +170,7 @@
       line-height: 1.5;
     }
     .start-button {
+      opacity: 0;
       padding: 12px 24px;
       font-size: 18px;
       font-weight: 700;
@@ -238,6 +241,79 @@
       background: linear-gradient(180deg, #4a9cf8, #3979d4);
     }
     
+    /* Leaderboard styles */
+    .leaderboard {
+      background: #0c1320;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+      max-width: 500px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .leaderboard-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      color: #e6eef6;
+      text-align: center;
+    }
+    .leaderboard-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .leaderboard-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: rgba(15, 23, 38, 0.5);
+      border-radius: 8px;
+    }
+    .leaderboard-item.current-player {
+      background: rgba(59, 143, 232, 0.3);
+      border: 1px solid rgba(59, 143, 232, 0.5);
+    }
+    .leaderboard-rank {
+      font-weight: 700;
+      color: #ffd86b;
+      width: 30px;
+    }
+    .leaderboard-name {
+      flex-grow: 1;
+      margin: 0 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .leaderboard-score {
+      font-weight: 700;
+      color: #e6eef6;
+    }
+    .leaderboard-close {
+      margin-top: 16px;
+      width: 100%;
+    }
+    .leaderboard-loading {
+      text-align: center;
+      padding: 20px;
+      color: var(--muted);
+    }
+    .leaderboard-empty {
+      text-align: center;
+      padding: 20px;
+      color: var(--muted);
+    }
+    .leaderboard-separator {
+      text-align: center;
+      padding: 10px;
+      color: var(--muted);
+      font-size: 14px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      margin-top: 10px;
+    }
+    
     /* Responsive adjustments */
     @media (max-width: 620px), (max-height: 615px) {
       .app {
@@ -272,38 +348,49 @@
   <!-- Start Screen -->
   <div class="start-screen" id="startScreen">
     <div class="start-modal">
-      <div class="start-title">ПЛИТКИ</div>
-      <div class="start-description">
+      <div class="start-description" data-i18n="game.description">
         Соединяйте одинаковые плитки, чтобы создавать большие значения. 
         Управляйте фигурами и создавайте комбо для получения дополнительных очков!
       </div>
-      <button class="start-button" id="startButton">Начать игру</button>
+      <button class="start-button" id="startButton" data-i18n="game.start">Начать игру</button>
     </div>
   </div>
 
   <!-- Pause Menu -->
   <div class="pause-menu" id="pauseMenu">
     <div class="pause-modal">
-      <div class="pause-title">ПАУЗА</div>
+      <div class="pause-title" data-i18n="pause.title">ПАУЗА</div>
       <div class="pause-buttons">
-        <button class="pause-button primary" id="resumeButton">Продолжить</button>
-        <button class="pause-button" id="restartButton">Новая игра</button>
-        <button class="pause-button" id="soundButton">Звук: Вкл</button>
+        <button class="pause-button primary" id="resumeButton" data-i18n="pause.resume">Продолжить</button>
+        <button class="pause-button" id="restartButton" data-i18n="pause.newGame">Новая игра</button>
+        <button class="pause-button" id="soundButton" data-i18n="pause.sound">Звук: Вкл</button>
+        <button class="pause-button" id="leaderboardButton" data-i18n="pause.leaderboard">Таблица лидеров</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Leaderboard Modal -->
+  <div class="overlay" id="leaderboardOverlay">
+    <div class="leaderboard">
+      <div class="leaderboard-title" data-i18n="leaderboard.title">Таблица лидеров</div>
+      <div id="leaderboardContent" class="leaderboard-list">
+        <div class="leaderboard-loading" data-i18n="leaderboard.loading">Загрузка...</div>
+      </div>
+      <button class="pause-button leaderboard-close" id="leaderboardClose" data-i18n="leaderboard.close">Закрыть</button>
     </div>
   </div>
 
   <div class="app">
     <div class="side">
       <div class="panel">
-        <div class="stat">Счёт: <span id="score">0</span></div>
-        <div class="stat">Рекорд: <span id="best">0</span></div>
+        <div class="stat"><span data-i18n="ui.score">Счёт</span>: <span id="score">0</span></div>
+        <div class="stat"><span data-i18n="ui.best">Рекорд</span>: <span id="best">0</span></div>
         <div style="height:8px"></div>
-        <button id="restart">Новая игра</button>
-        <button id="leaderboard">Таблица лидеров</button>
+        <button id="restart" data-i18n="ui.newGame">Новая игра</button>
+        <button id="leaderboard" data-i18n="ui.leaderboard">Таблица лидеров</button>
       </div>
       <div class="panel">
-        <div class="small">Следующая фигура:</div>
+        <div class="small" data-i18n="ui.nextPiece">Следующая фигура:</div>
         <div class="next-piece" id="nextPiece"></div>
       </div>
     </div>
@@ -312,7 +399,7 @@
       <button class="sound-toggle" id="soundToggle" title="Включить/выключить звук">🔊</button>
       <button class="pause-toggle" id="pauseToggle" title="Пауза">⏸️</button>
       <div class="board" id="board" aria-label="Игровое поле">
-        <div class="new-record" id="newRecord">НОВЫЙ РЕКОРД!</div>
+        <div class="new-record" id="newRecord" data-i18n="game.newRecord">НОВЫЙ РЕКОРД!</div>
       </div>
     </div>
   </div>
@@ -327,6 +414,7 @@
   const TICK_START = 700;
   const MIN_TICK = 100;
   const SETTLE_MS = 140; // small delay before locking to avoid instant snap bug
+  const AD_INTERVAL = 300000; // 5 minutes in milliseconds
 
   const boardEl = document.getElementById('board');
   const scoreEl = document.getElementById('score');
@@ -344,6 +432,10 @@
   const resumeButtonEl = document.getElementById('resumeButton');
   const restartButtonEl = document.getElementById('restartButton');
   const soundButtonEl = document.getElementById('soundButton');
+  const leaderboardButtonEl = document.getElementById('leaderboardButton');
+  const leaderboardOverlayEl = document.getElementById('leaderboardOverlay');
+  const leaderboardContentEl = document.getElementById('leaderboardContent');
+  const leaderboardCloseEl = document.getElementById('leaderboardClose');
 
   let grid = [];
   let current = null;
@@ -361,12 +453,520 @@
   let justPlacedBlocks = []; // track blocks that were just placed
   let gameStarted = false; // flag to track if game has started
   let currentBest = 0; // track current best score in this session
+  let lastAdTime = 0; // track when last ad was shown
+  let playerName = "Игрок"; // default player name
+  let isAuthorized = false; // track if player is authorized
+  let leaderboardData = []; // store leaderboard data
+  let currentLanguage = 'ru'; // язык по умолчанию
+  let leaderboardPaused = false; // track if game is paused for leaderboard
 
   // flag to prevent multiple drop sounds from repeated settle attempts
   let dropSoundPending = false;
 
+  // Yandex Games SDK variables
+  let ysdk = null;
+  let player = null;
+
+  // Internationalization
+  const translations = {
+    ru: {
+      game: {
+        description: "Соединяйте одинаковые плитки, чтобы создавать большие значения. Управляйте фигурами и создавайте комбо для получения дополнительных очков!",
+        start: "Начать игру",
+        newRecord: "НОВЫЙ РЕКОРД!",
+        gameOver: "Конец игры"
+      },
+      pause: {
+        title: "ПАУЗА",
+        resume: "Продолжить",
+        newGame: "Новая игра",
+        sound: "Звук: Вкл",
+        soundoff: "Звук: Выкл",
+        leaderboard: "Таблица лидеров"
+      },
+      ui: {
+        score: "Счёт",
+        best: "Рекорд",
+        newGame: "Новая игра",
+        leaderboard: "Таблица лидеров",
+        nextPiece: "Следующая фигура:",
+        playAgain: "Играть ещё",
+        close: "Закрыть"
+      },
+      leaderboard: {
+        title: "Таблица лидеров",
+        loading: "Загрузка...",
+        close: "Закрыть",
+        empty: "Место не занято",
+        yourPlace: "Ваше место"
+      },
+      praise: {
+        bombastic: "БОМБЕЗНО!",
+        amazing: "Потрясающе!",
+        excellent: "Великолепно!",
+        great: "Отлично!",
+        good: "Хорошо!",
+        super: "Супер!",
+        comboMaster: "КОМБО-МАСТЕР!",
+        classicCombo: "Классический комбо!"
+      }
+    },
+    en: {
+      game: {
+        description: "Connect identical tiles to create larger values. Control shapes and create combos for extra points!",
+        start: "Start Game",
+        newRecord: "NEW RECORD!",
+        gameOver: "Game Over"
+      },
+      pause: {
+        title: "PAUSE",
+        resume: "Resume",
+        newGame: "New Game",
+        sound: "Sound: On",
+        soundoff: "Sound: Off",
+        leaderboard: "Leaderboard"
+      },
+      ui: {
+        score: "Score",
+        best: "Best",
+        newGame: "New Game",
+        leaderboard: "Leaderboard",
+        nextPiece: "Next piece:",
+        playAgain: "Play Again",
+        close: "Close"
+      },
+      leaderboard: {
+        title: "Leaderboard",
+        loading: "Loading...",
+        close: "Close",
+        empty: "Position not taken",
+        yourPlace: "Your position"
+      },
+      praise: {
+        bombastic: "BOMBASTIC!",
+        amazing: "Amazing!",
+        excellent: "Excellent!",
+        great: "Great!",
+        good: "Good!",
+        super: "Super!",
+        comboMaster: "COMBO MASTER!",
+        classicCombo: "Classic combo!"
+      }
+    }
+  };
+
+  // Get current language
+  function getCurrentLanguage() {
+    // Try to get language from Yandex SDK if available
+    if (ysdk && ysdk.environment && ysdk.environment.i18n) {
+      return ysdk.environment.i18n.lang;
+    }
+    
+    // Fallback to browser language
+    const browserLang = navigator.language || navigator.userLanguage;
+    if (browserLang.startsWith('en')) return 'en';
+    if (browserLang.startsWith('ru')) return 'ru';
+    
+    // Default to Russian
+    return 'ru';
+  }
+
+  // Translate text
+  function t(key) {
+    const keys = key.split('.');
+    let value = translations[currentLanguage];
+    
+    for (const k of keys) {
+      if (value && value[k]) {
+        value = value[k];
+      } else {
+        // Fallback to Russian if translation not found
+        value = translations.ru;
+        for (const k of keys) {
+          if (value && value[k]) {
+            value = value[k];
+          } else {
+            return key; // Return key if translation not found
+          }
+        }
+        break;
+      }
+    }
+    
+    return value;
+  }
+
+  // Update all UI elements with translations
+  function updateTranslations() {
+    document.querySelectorAll('[data-i18n]').forEach(element => {
+      const key = element.getAttribute('data-i18n');
+      element.textContent = t(key);
+    });
+    
+    
+    
+    // Update sound button text
+    soundButtonEl.textContent = (soundEnabled ? t('pause.sound') : t('pause.soundoff'));
+    
+    // Update tooltips
+    soundToggleEl.title = t('ui.soundToggle');
+    pauseToggleEl.title = t('ui.pause');
+  }
+
   bestEl.textContent = best;
   currentBest = best;
+
+  // Initialize Yandex Games SDK
+  function initYandexSDK() {
+    return new Promise((resolve, reject) => {
+      if (typeof YaGames !== 'undefined') {
+        YaGames.init({
+          scope: 'public_data'
+        }).then(_ysdk => {
+          ysdk = _ysdk;
+          console.log('Yandex SDK initialized');
+          
+          // ОПРЕДЕЛЕНИЕ ЯЗЫКА
+          currentLanguage = getCurrentLanguage();
+          console.log('Language detected:', currentLanguage);
+          
+          // Update translations after language detection
+          updateTranslations();
+          
+          // Get player info
+          player = ysdk.getPlayer({
+            scopes: 'public_data'
+          }).then(_player => {
+            player = _player;
+            playerName = player.getName() || (currentLanguage === 'en' ? "Player" : "Игрок");
+            isAuthorized = player.isAuthorized();
+            console.log('Player info loaded:', playerName, isAuthorized);
+            
+            // Get environment info
+            const env = ysdk.environment;
+            console.log('Environment:', env);
+            
+            // Call ready when all resources are loaded
+            if (ysdk.features.LoadingAPI) {
+              ysdk.features.LoadingAPI.ready();
+              document.getElementById('startButton').style.opacity = 1;
+            }
+            
+            resolve();
+          }).catch(err => {
+            console.error('Error getting player info:', err);
+            
+            // Get environment info even if player info fails
+            const env = ysdk.environment;
+            console.log('Environment:', env);
+            
+            // Call ready when all resources are loaded
+            if (ysdk.features.LoadingAPI) {
+              ysdk.features.LoadingAPI.ready();
+            }
+            
+            resolve();
+          });
+        }).catch(err => {
+          console.error('Error initializing Yandex SDK:', err);
+          reject(err);
+        });
+      } else {
+        console.error('Yandex SDK not available');
+        reject(new Error('Yandex SDK not available'));
+      }
+    });
+  }
+
+  // Show ad
+  function showAd() {
+    if (!ysdk) return;
+    
+    const now = Date.now();
+    if (now - lastAdTime < AD_INTERVAL) return; // Don't show ad if not enough time has passed
+    
+    lastAdTime = now;
+    
+    // Stop gameplay
+    if (ysdk.features.GameplayAPI) {
+      ysdk.features.GameplayAPI.stop();
+    }
+    
+    // Pause game and audio
+    if (timer) clearInterval(timer);
+    suspendAudioSystem();
+    
+    // Show fullscreen ad
+    ysdk.adv.showFullscreenAdv({
+      callbacks: {
+        onClose: () => {
+          console.log('Ad closed');
+          // Resume game and audio
+          if (!paused && gameStarted) {
+            // Start gameplay
+            if (ysdk.features.GameplayAPI) {
+              ysdk.features.GameplayAPI.start();
+            }
+            
+            restartTimer();
+            resumeAudioSystem();
+          }
+        },
+        onError: (err) => {
+          console.error('Ad error:', err);
+          // Resume game and audio even if ad fails
+          if (!paused && gameStarted) {
+            // Start gameplay
+            if (ysdk.features.GameplayAPI) {
+              ysdk.features.GameplayAPI.start();
+            }
+            
+            restartTimer();
+            resumeAudioSystem();
+          }
+        }
+      }
+    });
+  }
+
+  // Show rewarded ad
+  function showRewardedAd(callback) {
+    if (!ysdk) {
+      if (callback) callback(false);
+      return;
+    }
+    
+    // Stop gameplay
+    if (ysdk.features.GameplayAPI) {
+      ysdk.features.GameplayAPI.stop();
+    }
+    
+    // Pause game and audio
+    if (timer) clearInterval(timer);
+    suspendAudioSystem();
+    
+    // Show rewarded ad
+    ysdk.adv.showRewardedVideo({
+      callbacks: {
+        onOpen: () => console.log('Rewarded ad opened'),
+        onRewarded: () => {
+          console.log('Rewarded ad completed');
+          if (callback) callback(true);
+        },
+        onClose: () => {
+          console.log('Rewarded ad closed');
+          // Resume game and audio
+          if (!paused && gameStarted) {
+            // Start gameplay
+            if (ysdk.features.GameplayAPI) {
+              ysdk.features.GameplayAPI.start();
+            }
+            
+            restartTimer();
+            resumeAudioSystem();
+          }
+          if (callback) callback(false);
+        },
+        onError: (err) => {
+          console.error('Rewarded ad error:', err);
+          // Resume game and audio even if ad fails
+          if (!paused && gameStarted) {
+            // Start gameplay
+            if (ysdk.features.GameplayAPI) {
+              ysdk.features.GameplayAPI.start();
+            }
+            
+            restartTimer();
+            resumeAudioSystem();
+          }
+          if (callback) callback(false);
+        }
+      }
+    });
+  }
+
+  // Load leaderboard
+  function loadLeaderboard() {
+    if (!ysdk || !ysdk.leaderboards) {
+      showEmptyLeaderboard();
+      return Promise.resolve();
+    }
+    
+    // Проверяем доступность методов таблицы лидеров
+    return ysdk.isAvailableMethod('leaderboards.getEntries').then(available => {
+      if (!available) {
+        console.log('Leaderboards methods not available for this user');
+        showEmptyLeaderboard();
+        return;
+      }
+      
+      // Get leaderboard
+      return Promise.all([
+        ysdk.leaderboards.getEntries('leaders', {
+          quantityTop: 10,
+          includeUser: false
+        }),
+        ysdk.leaderboards.getPlayerEntry('leaders').catch(err => {
+          if (err.code === 'LEADERBOARD_PLAYER_NOT_PRESENT') {
+            return null;
+          }
+          throw err;
+        })
+      ]).then(([topEntries, playerEntry]) => {
+        leaderboardData = topEntries.entries;
+        displayLeaderboard(leaderboardData, playerEntry ? playerEntry.rank : null);
+      }).catch(err => {
+        console.error('Error getting leaderboard:', err);
+        showEmptyLeaderboard();
+      });
+    }).catch(err => {
+      console.log('Error checking leaderboard availability:', err);
+      showEmptyLeaderboard();
+    });
+  }
+
+  // Show empty leaderboard if SDK not available
+  function showEmptyLeaderboard() {
+    displayLeaderboard([]);
+  }
+
+  // Display leaderboard
+  function displayLeaderboard(data, userRank) {
+    if (!data || data.length === 0) {
+      let html = '';
+      for (let i = 1; i <= 10; i++) {
+        html += `
+          <div class="leaderboard-item">
+            <div class="leaderboard-rank">${i}</div>
+            <div class="leaderboard-name">${t('leaderboard.empty')}</div>
+            <div class="leaderboard-score">-</div>
+          </div>
+        `;
+      }
+      
+      if (best > 0) {
+        html += `
+          <div class="leaderboard-separator">${t('leaderboard.yourPlace')}</div>
+          <div class="leaderboard-item current-player">
+            <div class="leaderboard-rank">-</div>
+            <div class="leaderboard-name">${playerName}</div>
+            <div class="leaderboard-score">${best}</div>
+          </div>
+        `;
+      }
+      
+      leaderboardContentEl.innerHTML = html;
+      return;
+    }
+    
+    let html = '';
+    let playerInList = false;
+    
+    // Add existing entries
+    for (let i = 0; i < Math.min(10, data.length); i++) {
+      const entry = data[i];
+      const isCurrentPlayer = entry.player && entry.player.uniqueID === (player ? player.uniqueID : null);
+      if (isCurrentPlayer) playerInList = true;
+      
+      html += `
+        <div class="leaderboard-item ${isCurrentPlayer ? 'current-player' : ''}">
+          <div class="leaderboard-rank">${entry.rank}</div>
+          <div class="leaderboard-name">${entry.player ? entry.player.publicName : (currentLanguage === 'en' ? 'Anonymous' : 'Аноним')}</div>
+          <div class="leaderboard-score">${entry.score}</div>
+        </div>
+      `;
+    }
+    
+    // Fill remaining slots with empty positions
+    for (let i = data.length; i < 10; i++) {
+      html += `
+        <div class="leaderboard-item">
+          <div class="leaderboard-rank">${i + 1}</div>
+          <div class="leaderboard-name">${t('leaderboard.empty')}</div>
+          <div class="leaderboard-score">-</div>
+        </div>
+      `;
+    }
+    
+    // Add current player if not in list and has a score
+    if (!playerInList && best > 0) {
+      html += `
+        <div class="leaderboard-separator">${t('leaderboard.yourPlace')}</div>
+        <div class="leaderboard-item current-player">
+          <div class="leaderboard-rank">${userRank ? userRank : '-'}</div>
+          <div class="leaderboard-name">${playerName}</div>
+          <div class="leaderboard-score">${best}</div>
+        </div>
+      `;
+    }
+    
+    leaderboardContentEl.innerHTML = html;
+  }
+
+  // Submit score to leaderboard
+  function submitScore(score) {
+    if (!ysdk || !ysdk.leaderboards || score <= 0) {
+      console.log('Leaderboards not available or invalid score');
+      return Promise.resolve();
+    }
+    
+    // Всегда обновляем локальный рекорд
+    if (score > best) {
+      best = score;
+      bestEl.textContent = best;
+      localStorage.setItem('tetris2048_best', best);
+      
+      if (player) {
+        player.setData({ bestScore: best });
+      }
+      
+      if (!newRecordSoundPlayed) {
+        playSound('newrecord');
+        newRecordSoundPlayed = true;
+      }
+    }
+    
+    // Проверяем, доступен ли метод для установки счета
+    return ysdk.isAvailableMethod('leaderboards.setScore').then(available => {
+      if (!available) {
+        console.log('Leaderboard setScore method not available for this user');
+        return;
+      }
+      
+      // Сначала пробуем получить текущую запись игрока
+      return ysdk.leaderboards.getPlayerEntry('leaders')
+        .then(currentEntry => {
+          // Если запись существует и текущий счет лучше - обновляем
+          if (!currentEntry || score >= currentEntry.score) {
+            return ysdk.leaderboards.setScore('leaders', score);
+          }
+        })
+        .then(() => {
+          console.log('Score successfully updated in leaderboard:', score);
+        })
+        .catch(err => {
+          // Обрабатываем ошибку, когда игрок отсутствует в таблице лидеров
+          if (err.code === 'LEADERBOARD_PLAYER_NOT_PRESENT') {
+            console.log('Player not present in leaderboard, adding player...');
+            // Если игрок отсутствует, просто устанавливаем счет
+            return ysdk.leaderboards.setScore('leaders', score)
+              .then(() => {
+                console.log('Player added to leaderboard with score:', score);
+              });
+          } else if (err.code === 'LEADERBOARD_TOO_MANY_REQUESTS') {
+            console.log('Too many requests, retrying in 1 second');
+            setTimeout(() => submitScore(score), 1000);
+          } else if (err.code === 'NETWORK_ERROR') {
+            console.log('Network error, retrying in 2 seconds');
+            setTimeout(() => submitScore(score), 2000);
+          } else {
+            console.error('Error updating leaderboard score:', err);
+          }
+        });
+    }).catch(err => {
+      console.log('Error checking leaderboard availability:', err);
+    });
+  }
 
   // Responsive scaling function
   function updateScale() {
@@ -539,7 +1139,7 @@
     soundEnabled = !soundEnabled;
     soundToggleEl.textContent = soundEnabled ? '🔊' : '🔇';
     soundToggleEl.classList.toggle('muted', !soundEnabled);
-    soundButtonEl.textContent = `Звук: ${soundEnabled ? 'Вкл' : 'Выкл'}`;
+    soundButtonEl.textContent =  (soundEnabled ? t('pause.sound') : t('pause.soundoff'));
     
     if (soundEnabled) {
       // если аудио-контекст был suspended из-за паузы, не принудительно resume здесь
@@ -594,7 +1194,7 @@
   function createBoard(){
     boardEl.style.setProperty('--cols', COLS);
     boardEl.style.setProperty('--rows', ROWS);
-    boardEl.innerHTML = '<div class="new-record" id="newRecord">НОВЫЙ РЕКОРД!</div>';
+    boardEl.innerHTML = `<div class="new-record" id="newRecord">${t('game.newRecord')}</div>`;
     for (let r=0;r<ROWS;r++){
       for (let c=0;c<COLS;c++){
         const bg = document.createElement('div');
@@ -1018,12 +1618,12 @@
 
   function choosePraise(val, size){
     // bigger merges get stronger praise
-    if (val >= 1024) return 'БОМБЕЗНО!';
-    if (val >= 512) return 'Потрясающе!';
-    if (val >= 128) return 'Великолепно!';
-    if (size >= 4) return 'Отлично!';
-    if (size >= 3) return 'Хорошо!';
-    return 'Супер!';
+    if (val >= 1024) return t('praise.bombastic');
+    if (val >= 512) return t('praise.amazing');
+    if (val >= 128) return t('praise.excellent');
+    if (size >= 4) return t('praise.great');
+    if (size >= 3) return t('praise.good');
+    return t('praise.super');
   }
 
   function showPraise(text, x, y){
@@ -1051,7 +1651,7 @@
     
     const p = document.createElement('div');
     p.className = 'combo';
-    p.textContent = `КОМБО x${count}`;
+    p.textContent = `COMBO x${count}`;
     p.style.left = `${x}px`;
     p.style.top = `${y - 20}px`;
     tileLayer.appendChild(p);
@@ -1121,7 +1721,7 @@
               if (comboChain > 1){
                 const centerX = (COLS/2) * (cellMetrics().cell + cellMetrics().gap);
                 const centerY = (ROWS/3) * (cellMetrics().cell + cellMetrics().gap);
-                showPraise(comboChain >= 4 ? 'КОМБО-МАСТЕР!' : 'Классический комбо!', centerX, centerY);
+                showPraise(comboChain >= 4 ? t('praise.comboMaster') : t('praise.classicCombo'), centerX, centerY);
               }
               spawnNext();
             }
@@ -1222,7 +1822,7 @@
   }
 
   function step(){
-    if (paused) return;
+    if (paused || leaderboardPaused) return;
     if (!current) return;
     // try move down without playing sound
     if (move(0,1, false)){
@@ -1258,6 +1858,7 @@
     score = 0; 
     tick = TICK_START; 
     paused = false; 
+    leaderboardPaused = false;
     current = null; 
     nextPiece = null; 
     justPlacedBlocks = []; // Очищаем список только что упавших блоков
@@ -1270,6 +1871,12 @@
     restartTimer(); 
     overlay.classList.remove('show'); 
     gameStarted = true;
+    
+    // Start gameplay
+    if (ysdk && ysdk.features.GameplayAPI) {
+      ysdk.features.GameplayAPI.start();
+    }
+    
     // Ensure audio context resumed if required and start BG music
     if (soundEnabled) {
       resumeAudioSystem();
@@ -1283,7 +1890,23 @@
     playSound('gameover'); // Воспроизводим звук окончания игры
     stopBackgroundMusic(); // Останавливаем фоновую музыку
     gameStarted = false;
-    modal.innerHTML = `<div style="font-size:18px;font-weight:700;margin-bottom:8px">Конец игры</div><div class="small">Счёт: ${score}</div><div style="height:10px"></div><div style="display:flex;gap:8px"><button id=again>Играть ещё</button><button id=close class='secondary'>Закрыть</button></div>`; 
+    
+    // Stop gameplay
+    if (ysdk && ysdk.features.GameplayAPI) {
+      ysdk.features.GameplayAPI.stop();
+    }
+    
+    // Submit score to leaderboard
+    if (score > 0) {
+      submitScore(score).then(() => {
+        // После обновления данных обновляем отображение лучшего счета
+        bestEl.textContent = best;
+      }).catch(err => {
+        console.error('Error updating player score:', err);
+      });
+    }
+    
+    modal.innerHTML = `<div style="font-size:18px;font-weight:700;margin-bottom:8px">${t('game.gameOver')}</div><div class="small">${t('ui.score')}: ${score}</div><div style="height:10px"></div><div style="display:flex;gap:8px"><button id=again>${t('ui.playAgain')}</button><button id=close class='secondary'>${t('ui.close')}</button></div>`; 
     overlay.classList.add('show'); 
     document.getElementById('again').onclick = ()=>{ overlay.classList.remove('show'); startGame(); }; 
     document.getElementById('close').onclick = ()=>{ overlay.classList.remove('show'); } 
@@ -1292,13 +1915,25 @@
   // Функция для отображения/скрытия меню паузы
   function togglePause() {
     paused = !paused;
+    
     if (paused) {
+      // Stop gameplay
+      if (ysdk && ysdk.features.GameplayAPI) {
+        ysdk.features.GameplayAPI.stop();
+      }
+      
       if (timer) clearInterval(timer);
       suspendAudioSystem();
       pauseMenuEl.classList.add('show');
     } else {
       pauseMenuEl.classList.remove('show');
       restartTimer();
+      
+      // Start gameplay
+      if (ysdk && ysdk.features.GameplayAPI) {
+        ysdk.features.GameplayAPI.start();
+      }
+      
       // resume audio system (background music) if allowed
       resumeAudioSystem();
     }
@@ -1313,7 +1948,9 @@
     else if (e.key === 'ArrowUp'){ rotate(); draw(); e.preventDefault(); }
     else if (e.code === 'Space'){ hardDrop(); e.preventDefault(); }
     else if (e.key.toLowerCase() === 'p' || e.key === 'Escape'){
-      togglePause();
+      if (!leaderboardPaused) {
+        togglePause();
+      }
       e.preventDefault();
     }
   });
@@ -1338,6 +1975,12 @@
     paused = false;
     pauseMenuEl.classList.remove('show');
     restartTimer();
+    
+    // Start gameplay
+    if (ysdk && ysdk.features.GameplayAPI) {
+      ysdk.features.GameplayAPI.start();
+    }
+    
     resumeAudioSystem();
   });
 
@@ -1348,6 +1991,92 @@
 
   soundButtonEl.addEventListener('click', () => {
     toggleSound();
+  });
+
+  // Leaderboard button
+  leaderboardButtonEl.addEventListener('click', () => {
+    pauseMenuEl.classList.remove('show');
+    
+    // Pause the game for leaderboard without showing pause menu
+    leaderboardPaused = true;
+    
+    // Stop gameplay
+    if (ysdk && ysdk.features.GameplayAPI) {
+      ysdk.features.GameplayAPI.stop();
+    }
+    
+    // Pause game and audio
+    if (timer) clearInterval(timer);
+    suspendAudioSystem();
+    
+    loadLeaderboard();
+    leaderboardOverlayEl.classList.add('show');
+  });
+
+  leaderboardCloseEl.addEventListener('click', () => {
+    leaderboardOverlayEl.classList.remove('show');
+    
+    // Resume game after closing leaderboard
+    leaderboardPaused = false;
+    
+    // Start gameplay
+    if (ysdk && ysdk.features.GameplayAPI) {
+      ysdk.features.GameplayAPI.start();
+    }
+    
+    // Resume game and audio
+    restartTimer();
+    resumeAudioSystem();
+  });
+
+  // Leaderboard button in side panel
+  document.getElementById('leaderboard').addEventListener('click', () => {
+    // Pause the game for leaderboard without showing pause menu
+    leaderboardPaused = true;
+    
+    // Stop gameplay
+    if (ysdk && ysdk.features.GameplayAPI) {
+      ysdk.features.GameplayAPI.stop();
+    }
+    
+    // Pause game and audio
+    if (timer) clearInterval(timer);
+    suspendAudioSystem();
+    
+    loadLeaderboard();
+    leaderboardOverlayEl.classList.add('show');
+  });
+
+  // Initialize Yandex SDK
+  initYandexSDK().then(() => {
+    console.log('Yandex SDK initialized successfully');
+    // Set up game pause/resume events
+    ysdk.on('game_api_pause', () => {
+      if (!paused && gameStarted && !leaderboardPaused) {
+        togglePause();
+      }
+    });
+    
+    ysdk.on('game_api_resume', () => {
+      if (paused && gameStarted && !leaderboardPaused) {
+        togglePause();
+      }
+    });
+    
+    // Start game loop for ads
+    setInterval(() => {
+      if (gameStarted && !paused && !leaderboardPaused) {
+        showAd();
+      }
+    }, AD_INTERVAL);
+  }).catch(err => {
+    console.error('Failed to initialize Yandex SDK:', err);
+    // Fallback to local storage if SDK not available
+    startScreenEl.style.display = 'flex';
+    
+    // Try to detect language from browser
+    currentLanguage = getCurrentLanguage();
+    updateTranslations();
   });
 
   // initialization
