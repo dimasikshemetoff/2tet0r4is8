@@ -17,7 +17,7 @@
       --muted:#9aa4b2;
       --scale: 1;
     }
-    *{box-sizing:border-box;font-family:Inter, system-ui, Arial, sans-serif;-webkit-tap-highlight-color:transparent}
+    *{box-sizing:border-box;font-family:Inter, system-ui, Arial, sans-serif;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none}
     html,body{height:100%;overflow: hidden; margin:0;background-image:url('background.jpg');background-size:cover;background-position:center;color:#e6eef6;overflow-x:hidden;touch-action:manipulation}
 
     /* layout */
@@ -314,6 +314,47 @@
       margin-top: 10px;
     }
     
+    /* Custom scrollbar for leaderboard */
+    .leaderboard::-webkit-scrollbar {
+      width: 8px;
+    }
+    .leaderboard::-webkit-scrollbar-track {
+      background: rgba(15, 23, 38, 0.3);
+      border-radius: 4px;
+    }
+    .leaderboard::-webkit-scrollbar-thumb {
+      background: rgba(59, 143, 232, 0.7);
+      border-radius: 4px;
+    }
+    .leaderboard::-webkit-scrollbar-thumb:hover {
+      background: rgba(59, 143, 232, 0.9);
+    }
+    
+    /* Second chance button */
+    .second-chance-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 24px;
+      font-size: 16px;
+      font-weight: 700;
+      background: linear-gradient(180deg, #f7cf95, #f0b46b);
+      color: #111;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .second-chance-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(247, 207, 149, 0.4);
+    }
+    .second-chance-btn img {
+      width: 24px;
+      height: 24px;
+    }
+    
     /* Responsive adjustments */
     @media (max-width: 620px), (max-height: 615px) {
       .app {
@@ -344,7 +385,7 @@
     }
   </style>
 </head>
-<body>
+<body oncontextmenu="return false;">
   <!-- Start Screen -->
   <div class="start-screen" id="startScreen">
     <div class="start-modal">
@@ -414,7 +455,7 @@
   const TICK_START = 700;
   const MIN_TICK = 100;
   const SETTLE_MS = 140; // small delay before locking to avoid instant snap bug
-  const AD_INTERVAL = 300000; // 5 minutes in milliseconds
+  const AD_INTERVAL = 700000; 
 
   const boardEl = document.getElementById('board');
   const scoreEl = document.getElementById('score');
@@ -459,6 +500,7 @@
   let leaderboardData = []; // store leaderboard data
   let currentLanguage = 'ru'; // язык по умолчанию
   let leaderboardPaused = false; // track if game is paused for leaderboard
+  let secondChanceUsed = false; // track if second chance has been used
 
   // flag to prevent multiple drop sounds from repeated settle attempts
   let dropSoundPending = false;
@@ -474,7 +516,8 @@
         description: "Соединяйте одинаковые плитки, чтобы создавать большие значения. Управляйте фигурами и создавайте комбо для получения дополнительных очков!",
         start: "Начать игру",
         newRecord: "НОВЫЙ РЕКОРД!",
-        gameOver: "Конец игры"
+        gameOver: "Конец игры",
+        secondChance: "Второй шанс"
       },
       pause: {
         title: "ПАУЗА",
@@ -516,7 +559,8 @@
         description: "Connect identical tiles to create larger values. Control shapes and create combos for extra points!",
         start: "Start Game",
         newRecord: "NEW RECORD!",
-        gameOver: "Game Over"
+        gameOver: "Game Over",
+        secondChance: "Second Chance"
       },
       pause: {
         title: "PAUSE",
@@ -603,8 +647,6 @@
       element.textContent = t(key);
     });
     
-    
-    
     // Update sound button text
     soundButtonEl.textContent = (soundEnabled ? t('pause.sound') : t('pause.soundoff'));
     
@@ -679,11 +721,17 @@
   }
 
   // Show ad
-  function showAd() {
-    if (!ysdk) return;
+  function showAd(callback) {
+    if (!ysdk) {
+      if (callback) callback();
+      return;
+    }
     
     const now = Date.now();
-    if (now - lastAdTime < AD_INTERVAL) return; // Don't show ad if not enough time has passed
+    if (now - lastAdTime < AD_INTERVAL) {
+      if (callback) callback();
+      return; // Don't show ad if not enough time has passed
+    }
     
     lastAdTime = now;
     
@@ -711,6 +759,7 @@
             restartTimer();
             resumeAudioSystem();
           }
+          if (callback) callback();
         },
         onError: (err) => {
           console.error('Ad error:', err);
@@ -724,6 +773,7 @@
             restartTimer();
             resumeAudioSystem();
           }
+          if (callback) callback();
         }
       }
     });
@@ -1450,8 +1500,9 @@
       // Размещаем объединенную плитку
       grid[mr][mc] = mergedVal;
       
-      // Обновляем счет
-      score += mergedVal;
+      // Обновляем счет с учетом комбо
+      const comboMultiplier = 1 + Math.min(0.5, comboChain * 0.083); // 0.083 = 0.5/6
+      score += Math.floor(mergedVal * comboMultiplier);
       updateScoreAndLevel();
       
       anims.push({r: mr, c: mc, val: mergedVal, size: component.length});
@@ -1549,8 +1600,9 @@
           const [mr, mc] = component[bestIdx];
           grid[mr][mc] = mergedVal;
 
-          // score update
-          score += mergedVal;
+          // score update with combo multiplier
+          const comboMultiplier = 1 + Math.min(0.5, comboChain * 0.083); // 0.083 = 0.5/6
+          score += Math.floor(mergedVal * comboMultiplier);
           updateScoreAndLevel();
 
           anims.push({r: mr, c: mc, val: mergedVal, size: component.length});
@@ -1563,15 +1615,21 @@
   }
 
   function applyGravity(){
+    let moved = false;
     for (let c=0;c<COLS;c++){
       let write = ROWS-1;
       for (let r=ROWS-1;r>=0;r--){
         if (grid[r][c]){
-          if (r !== write){ grid[write][c] = grid[r][c]; grid[r][c] = 0; }
+          if (r !== write){ 
+            grid[write][c] = grid[r][c]; 
+            grid[r][c] = 0; 
+            moved = true;
+          }
           write--;
         }
       }
     }
+    return moved;
   }
 
   // animate merges: pop, spawn particles, show praise
@@ -1677,60 +1735,52 @@
     }, 3000);
   }
 
-  // НОВАЯ ЛОГИКА: функция для выполнения всех возможных слияний без гравитации
+  // ИСПРАВЛЕННАЯ ЛОГИКА: единая функция для выполнения всех возможных слияний
   function performAllMerges() {
-    let totalMerges = 0;
-    let totalAnims = [];
-    
-    function mergeLoop() {
-      const res = processMerges();
-      if (res.anyMerged) {
-        totalMerges++;
+    // Эта функция будет циклически выполняться, пока больше не останется возможных слияний.
+    // Она обрабатывает слияния, гравитацию и слияния после гравитации в одном непрерывном процессе.
+    function resolveBoard() {
+      // 1. Обрабатываем слияния на текущем состоянии поля.
+      const mergeResult = processMerges();
+
+      if (mergeResult.anyMerged) {
+        // 2. Если слияния произошли, обновляем состояние и анимируем.
         comboChain++;
-        totalAnims = totalAnims.concat(res.anims);
-        
-        // Анимируем текущие слияния
         draw();
-        animateMerges(res.anims);
-        
-        // Показываем комбо для цепочки слияний
-        if (res.anims && res.anims.length > 0) {
-          const a = res.anims[0];
+        animateMerges(mergeResult.anims);
+
+        // Показываем текст комбо для этого шага в цепочке.
+        if (mergeResult.anims.length > 0) {
+          const a = mergeResult.anims[0];
           const {cell,gap} = cellMetrics();
           const originLeft = a.c*(cell+gap) + cell/2;
           const originTop = a.r*(cell+gap) + cell/2;
           showCombo(comboChain, originLeft, originTop);
         }
-        
-        // Рекурсивно продолжаем проверять слияния
-        setTimeout(mergeLoop, 420);
-      } else {
-        // Все слияния завершены, применяем гравитацию
+
+        // 3. Применяем гравитацию после анимации слияний.
         setTimeout(() => {
-          applyGravity();
+          const gravityMoved = applyGravity();
           draw();
-          
-          // После гравитации проверяем, не появились ли новые возможности для слияния
-          setTimeout(() => {
-            const afterGravityRes = processMerges();
-            if (afterGravityRes.anyMerged) {
-              // Если после гравитации есть новые слияния, запускаем процесс заново
-              performAllMerges();
-            } else {
-              // Все слияния завершены, спавним следующую фигуру
-              if (comboChain > 1){
-                const centerX = (COLS/2) * (cellMetrics().cell + cellMetrics().gap);
-                const centerY = (ROWS/3) * (cellMetrics().cell + cellMetrics().gap);
-                showPraise(comboChain >= 4 ? t('praise.comboMaster') : t('praise.classicCombo'), centerX, centerY);
-              }
-              spawnNext();
-            }
-          }, 220);
-        }, totalMerges > 0 ? 420 : 0);
+
+          // 4. Рекурсивно вызываем resolveBoard для проверки новых слияний, вызванных гравитацией.
+          // Таймаут позволяет анимации гравитации быть видимой.
+          setTimeout(resolveBoard, 300); // 300ms для "установки" гравитации
+        }, 500); // 500ms для анимации слияния
+
+      } else {
+        // 5. Если больше нет слияний, поле стабильно. Завершаем ход.
+        if (comboChain > 1) {
+          const centerX = (COLS/2) * (cellMetrics().cell + cellMetrics().gap);
+          const centerY = (ROWS/3) * (cellMetrics().cell + cellMetrics().gap);
+          showPraise(comboChain >= 4 ? t('praise.comboMaster') : t('praise.classicCombo'), centerX, centerY);
+        }
+        spawnNext();
       }
     }
-    
-    mergeLoop();
+
+    // Запускаем процесс разрешения поля.
+    resolveBoard();
   }
 
   // lockPiece: при блокировке выполняем приоритетные боковые слияния вокруг только что упавших блоков,
@@ -1751,7 +1801,8 @@
     }
 
     current = null;
-    // НЕ сбрасываем comboChain здесь, чтобы сохранить его между горизонтальными и последующими слияниями
+    // Сбрасываем comboChain в начале хода
+    comboChain = 0;
 
     // ---------- НОВАЯ ЛОГИКА: сначала горизонтальные слияния, затем все остальные слияния ----------
     
@@ -1760,9 +1811,9 @@
     let horizontalMergeAnims = [];
     
     if (horizontalMerges.length > 0) {
+      // Если горизонтальные слияния произошли, они начинают цепочку комбо.
+      comboChain = 1; 
       horizontalMergeAnims = performHorizontalMerges(horizontalMerges);
-      // Увеличиваем comboChain только если он еще не был увеличен
-      if (comboChain === 0) comboChain = 1;
       draw();
       animateMerges(horizontalMergeAnims);
       
@@ -1775,20 +1826,23 @@
         showCombo(comboChain, originLeft, originTop);
       }
       
-      // После горизонтальных слияний применяем гравитацию
+      // После горизонтальных слияний применяем гравитацию и запускаем полный процесс слияний
       setTimeout(() => {
-        applyGravity();
+        const gravityMoved = applyGravity();
         draw();
-        
-        // Затем запускаем полный процесс слияний
+        // Запускаем единый процесс слияний. Цепочка комбо уже равна 1.
         setTimeout(() => {
           performAllMerges();
-        }, 220);
-      }, 420);
+        }, 300);
+      }, 500);
     } else {
-      // Если горизонтальных слияний нет, сразу запускаем полный процесс слияний
-      comboChain = 0; // Сбрасываем comboChain только если не было горизонтальных слияний
-      performAllMerges();
+      // Если горизонтальных слияний нет, сначала применяем гравитацию, затем запускаем полный процесс слияний.
+      // comboChain уже равен 0, что правильно.
+      const gravityMoved = applyGravity();
+      draw();
+      setTimeout(() => {
+        performAllMerges();
+      }, 300);
     }
   }
 
@@ -1830,7 +1884,7 @@
       if (settleTimer){ clearTimeout(settleTimer); settleTimer = null; dropSoundPending = false; }
       draw();
     } else {
-      // cannot move down -> start settle timer to avoid immediate snap bug
+      // cannot move down -> start settle timer to avoid instant snap bug
       if (!settleTimer){
         // play drop sound only once when first contacting the floor/another tile
         if (!dropSoundPending){
@@ -1866,6 +1920,7 @@
     newRecordSoundPlayed = false; // Сбрасываем флаг звука нового рекорда
     comboChain = 0; // Сбрасываем цепочку комбо
     currentBest = best; // Сбрасываем текущий лучший счет для этой игры
+    secondChanceUsed = false; // Сбрасываем флаг использования второго шанса
     spawnNext(); 
     scoreEl.textContent='0'; 
     restartTimer(); 
@@ -1881,6 +1936,54 @@
     if (soundEnabled) {
       resumeAudioSystem();
     }
+  }
+
+  // Функция для использования второго шанса
+  function useSecondChance() {
+    if (secondChanceUsed) return;
+    
+    showRewardedAd((success) => {
+      if (success) {
+        secondChanceUsed = true;
+        
+        // Удаляем все плитки со значением меньше 16
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            if (grid[r][c] && grid[r][c] < 16) {
+              grid[r][c] = 0;
+            }
+          }
+        }
+        
+        // Применяем гравитацию к оставшимся плиткам
+        applyGravity();
+        
+        // Обновляем отображение
+        draw();
+        
+        // Закрываем модальное окно
+        overlay.classList.remove('show');
+        
+        // Продолжаем игру
+        gameStarted = true;
+        
+        // Start gameplay
+        if (ysdk && ysdk.features.GameplayAPI) {
+          ysdk.features.GameplayAPI.start();
+        }
+        
+        // Восстанавливаем аудио
+        if (soundEnabled) {
+          resumeAudioSystem();
+        }
+        
+        // Перезапускаем таймер
+        restartTimer();
+        
+        // Создаем новую фигуру
+        spawnNext();
+      }
+    });
   }
 
   function gameOver(){ 
@@ -1906,10 +2009,31 @@
       });
     }
     
-    modal.innerHTML = `<div style="font-size:18px;font-weight:700;margin-bottom:8px">${t('game.gameOver')}</div><div class="small">${t('ui.score')}: ${score}</div><div style="height:10px"></div><div style="display:flex;gap:8px"><button id=again>${t('ui.playAgain')}</button><button id=close class='secondary'>${t('ui.close')}</button></div>`; 
-    overlay.classList.add('show'); 
-    document.getElementById('again').onclick = ()=>{ overlay.classList.remove('show'); startGame(); }; 
-    document.getElementById('close').onclick = ()=>{ overlay.classList.remove('show'); } 
+    // Создаем модальное окно с кнопкой второго шанса, если она еще не использована
+    let modalContent = `<div style="font-size:18px;font-weight:700;margin-bottom:8px">${t('game.gameOver')}</div><div class="small">${t('ui.score')}: ${score}</div><div style="height:10px"></div><div style="display:flex;gap:8px;flex-direction:column">`;
+    
+    if (!secondChanceUsed) {
+      modalContent += `<button class="second-chance-btn" id="secondChance"><img src="ad.png" alt="Ad">${t('game.secondChance')}</button>`;
+    }
+    
+    modalContent += `<div style="display:flex;gap:8px"><button id=again>${t('ui.playAgain')}</button><button id=close class='secondary'>${t('ui.close')}</button></div></div>`;
+    
+    modal.innerHTML = modalContent;
+    overlay.classList.add('show');
+    
+    // Добавляем обработчики событий
+    document.getElementById('again').onclick = ()=>{ 
+      overlay.classList.remove('show'); 
+      showAd(() => startGame()); // Показываем рекламу при перезапуске игры
+    };
+    
+    document.getElementById('close').onclick = ()=>{ overlay.classList.remove('show'); }
+    
+    // Добавляем обработчик для кнопки второго шанса, если она существует
+    const secondChanceBtn = document.getElementById('secondChance');
+    if (secondChanceBtn) {
+      secondChanceBtn.onclick = useSecondChance;
+    }
   }
 
   // Функция для отображения/скрытия меню паузы
@@ -1927,15 +2051,18 @@
       pauseMenuEl.classList.add('show');
     } else {
       pauseMenuEl.classList.remove('show');
-      restartTimer();
-      
-      // Start gameplay
-      if (ysdk && ysdk.features.GameplayAPI) {
-        ysdk.features.GameplayAPI.start();
-      }
-      
-      // resume audio system (background music) if allowed
-      resumeAudioSystem();
+      // Показываем рекламу при выходе из паузы
+      showAd(() => {
+        restartTimer();
+        
+        // Start gameplay
+        if (ysdk && ysdk.features.GameplayAPI) {
+          ysdk.features.GameplayAPI.start();
+        }
+        
+        // resume audio system (background music) if allowed
+        resumeAudioSystem();
+      });
     }
   }
 
@@ -1958,7 +2085,9 @@
   // safe UI buttons
   (function(){ 
     const restartBtn = document.getElementById('restart'); 
-    if (restartBtn) restartBtn.addEventListener('click', ()=>startGame()); 
+    if (restartBtn) restartBtn.addEventListener('click', ()=>{ 
+      showAd(() => startGame()); // Показываем рекламу при перезапуске игры
+    }); 
   })();
 
   // Start button
@@ -1974,19 +2103,22 @@
   resumeButtonEl.addEventListener('click', () => {
     paused = false;
     pauseMenuEl.classList.remove('show');
-    restartTimer();
-    
-    // Start gameplay
-    if (ysdk && ysdk.features.GameplayAPI) {
-      ysdk.features.GameplayAPI.start();
-    }
-    
-    resumeAudioSystem();
+    // Показываем рекламу при выходе из паузы
+    showAd(() => {
+      restartTimer();
+      
+      // Start gameplay
+      if (ysdk && ysdk.features.GameplayAPI) {
+        ysdk.features.GameplayAPI.start();
+      }
+      
+      resumeAudioSystem();
+    });
   });
 
   restartButtonEl.addEventListener('click', () => {
     pauseMenuEl.classList.remove('show');
-    startGame();
+    showAd(() => startGame());
   });
 
   soundButtonEl.addEventListener('click', () => {
@@ -2019,14 +2151,17 @@
     // Resume game after closing leaderboard
     leaderboardPaused = false;
     
-    // Start gameplay
-    if (ysdk && ysdk.features.GameplayAPI) {
-      ysdk.features.GameplayAPI.start();
-    }
-    
-    // Resume game and audio
-    restartTimer();
-    resumeAudioSystem();
+    // Показываем рекламу при выходе из таблицы лидеров
+    showAd(() => {
+      // Start gameplay
+      if (ysdk && ysdk.features.GameplayAPI) {
+        ysdk.features.GameplayAPI.start();
+      }
+      
+      // Resume game and audio
+      restartTimer();
+      resumeAudioSystem();
+    });
   });
 
   // Leaderboard button in side panel
@@ -2078,13 +2213,11 @@
     currentLanguage = getCurrentLanguage();
     updateTranslations();
   });
-
   // initialization
   resetGrid(); 
   createBoard(); 
   nextPiece = makePiece(); 
   drawNext(); 
-
 })();
 </script>
 </body>
