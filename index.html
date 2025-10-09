@@ -33,6 +33,9 @@
     /* floating tile elements for animation */
     .tile-el{position:absolute;width:var(--cell-size);height:var(--cell-size);display:flex;align-items:center;justify-content:center;border-radius:8px;font-weight:800;transition:transform 220ms cubic-bezier(.2,.9,.2,1), top 220ms cubic-bezier(.2,.9,.2,1), left 220ms cubic-bezier(.2,.9,.2,1);box-shadow:0 6px 18px rgba(2,6,23,0.6);pointer-events:none}
     .tile-el .label{transform:translateY(1px)}
+    
+    /* gravity animation class */
+    .tile-el.falling{transition:top 200ms cubic-bezier(.2,.6,.3,1)}
 
     /* merge animation */
     .merge-anim{animation:mergePop 320ms ease forwards}
@@ -355,6 +358,46 @@
       height: 24px;
     }
     
+    /* Ad warning notification */
+    .ad-warning {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(12, 19, 32, 0.95);
+      padding: 20px 30px;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+      z-index: 120;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-width: 250px;
+      border: 2px solid rgba(59, 143, 232, 0.5);
+    }
+    .ad-warning.show {
+      display: flex;
+      animation: fadeIn 0.3s ease-out;
+    }
+    .ad-warning-text {
+      font-size: 18px;
+      font-weight: 700;
+      color: #e6eef6;
+      margin-bottom: 15px;
+      text-align: center;
+    }
+    .ad-warning-timer {
+      font-size: 36px;
+      font-weight: 900;
+      color: #ffd86b;
+      text-shadow: 0 2px 10px rgba(255, 216, 107, 0.5);
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+      to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    }
+    
     /* Responsive adjustments */
     @media (max-width: 620px), (max-height: 615px) {
       .app {
@@ -421,6 +464,12 @@
     </div>
   </div>
 
+  <!-- Ad Warning Notification -->
+  <div class="ad-warning" id="adWarning">
+    <div class="ad-warning-text" data-i18n="ad.warning">Реклама через</div>
+    <div class="ad-warning-timer" id="adWarningTimer">2</div>
+  </div>
+
   <div class="app">
     <div class="side">
       <div class="panel">
@@ -456,6 +505,7 @@
   const MIN_TICK = 100;
   const SETTLE_MS = 140; // small delay before locking to avoid instant snap bug
   const AD_INTERVAL = 700000; 
+  const AD_WARNING_TIME = 2000; // 2 seconds warning before ad
 
   const boardEl = document.getElementById('board');
   const scoreEl = document.getElementById('score');
@@ -477,6 +527,8 @@
   const leaderboardOverlayEl = document.getElementById('leaderboardOverlay');
   const leaderboardContentEl = document.getElementById('leaderboardContent');
   const leaderboardCloseEl = document.getElementById('leaderboardClose');
+  const adWarningEl = document.getElementById('adWarning');
+  const adWarningTimerEl = document.getElementById('adWarningTimer');
 
   let grid = [];
   let current = null;
@@ -501,6 +553,11 @@
   let currentLanguage = 'ru'; // язык по умолчанию
   let leaderboardPaused = false; // track if game is paused for leaderboard
   let secondChanceUsed = false; // track if second chance has been used
+  let pageVisible = true; // track if page is visible
+  let adTimer = null; // timer for ads
+  let userInitiatedPause = false; // track if pause was initiated by user
+  let adWarningTimer = null; // timer for ad warning countdown
+  let adWarningActive = false; // flag to track if ad warning is active
 
   // flag to prevent multiple drop sounds from repeated settle attempts
   let dropSoundPending = false;
@@ -552,6 +609,9 @@
         super: "Супер!",
         comboMaster: "КОМБО-МАСТЕР!",
         classicCombo: "Классический комбо!"
+      },
+      ad: {
+        warning: "Реклама через"
       }
     },
     en: {
@@ -595,6 +655,9 @@
         super: "Super!",
         comboMaster: "COMBO MASTER!",
         classicCombo: "Classic combo!"
+      },
+      ad: {
+        warning: "Ad in"
       }
     }
   };
@@ -720,6 +783,30 @@
     });
   }
 
+  // Show ad warning - ТОЛЬКО для геймплейной рекламы
+  function showAdWarning(callback) {
+    if (adWarningActive) return;
+    
+    adWarningActive = true;
+    adWarningEl.classList.add('show');
+    
+    let countdown = 2;
+    adWarningTimerEl.textContent = countdown;
+    
+    adWarningTimer = setInterval(() => {
+      countdown--;
+      adWarningTimerEl.textContent = countdown;
+      
+      if (countdown <= 0) {
+        clearInterval(adWarningTimer);
+        adWarningEl.classList.remove('show');
+        adWarningActive = false;
+        
+        if (callback) callback();
+      }
+    }, 1000);
+  }
+
   // Show ad
   function showAd(callback) {
     if (!ysdk) {
@@ -733,55 +820,70 @@
       return; // Don't show ad if not enough time has passed
     }
     
-    lastAdTime = now;
-    
-    // Stop gameplay
-    if (ysdk.features.GameplayAPI) {
-      ysdk.features.GameplayAPI.stop();
+    // Don't show ad if page is not visible
+    if (!pageVisible) {
+      if (callback) callback();
+      return;
     }
     
-    // Pause game and audio
-    if (timer) clearInterval(timer);
-    suspendAudioSystem();
+    lastAdTime = now;
     
-    // Show fullscreen ad
-    ysdk.adv.showFullscreenAdv({
-      callbacks: {
-        onClose: () => {
-          console.log('Ad closed');
-          // Resume game and audio
-          if (!paused && gameStarted) {
-            // Start gameplay
-            if (ysdk.features.GameplayAPI) {
-              ysdk.features.GameplayAPI.start();
-            }
-            
-            restartTimer();
-            resumeAudioSystem();
-          }
-          if (callback) callback();
-        },
-        onError: (err) => {
-          console.error('Ad error:', err);
-          // Resume game and audio even if ad fails
-          if (!paused && gameStarted) {
-            // Start gameplay
-            if (ysdk.features.GameplayAPI) {
-              ysdk.features.GameplayAPI.start();
-            }
-            
-            restartTimer();
-            resumeAudioSystem();
-          }
-          if (callback) callback();
-        }
+    // Show warning before ad (ТОЛЬКО для геймплейной рекламы)
+    showAdWarning(() => {
+      // Stop gameplay
+      if (ysdk.features.GameplayAPI) {
+        ysdk.features.GameplayAPI.stop();
       }
+      
+      // Pause game and audio
+      if (timer) clearInterval(timer);
+      suspendAudioSystem();
+      
+      // Show fullscreen ad
+      ysdk.adv.showFullscreenAdv({
+        callbacks: {
+          onClose: () => {
+            console.log('Ad closed');
+            // Resume game and audio
+            if (!paused && gameStarted) {
+              // Start gameplay
+              if (ysdk.features.GameplayAPI) {
+                ysdk.features.GameplayAPI.start();
+              }
+              
+              restartTimer();
+              resumeAudioSystem();
+            }
+            if (callback) callback();
+          },
+          onError: (err) => {
+            console.error('Ad error:', err);
+            // Resume game and audio even if ad fails
+            if (!paused && gameStarted) {
+              // Start gameplay
+              if (ysdk.features.GameplayAPI) {
+                ysdk.features.GameplayAPI.start();
+              }
+              
+              restartTimer();
+              resumeAudioSystem();
+            }
+            if (callback) callback();
+          }
+        }
+      });
     });
   }
 
-  // Show rewarded ad
+  // Show rewarded ad - БЕЗ таймера
   function showRewardedAd(callback) {
     if (!ysdk) {
+      if (callback) callback(false);
+      return;
+    }
+    
+    // Don't show ad if page is not visible
+    if (!pageVisible) {
       if (callback) callback(false);
       return;
     }
@@ -795,7 +897,7 @@
     if (timer) clearInterval(timer);
     suspendAudioSystem();
     
-    // Show rewarded ad
+    // Show rewarded ad (БЕЗ таймера)
     ysdk.adv.showRewardedVideo({
       callbacks: {
         onOpen: () => console.log('Rewarded ad opened'),
@@ -1360,18 +1462,43 @@
     });
   }
 
-  // Next preview (simple grid cells)
+  // Next preview (simple grid cells) - ИСПРАВЛЕННАЯ ВЕРСИЯ
   function drawNext(){
     nextEl.innerHTML = '';
-    for (let i=0;i<16;i++){ const d = document.createElement('div'); d.className='cell-bg'; nextEl.appendChild(d);}    
+    for (let i=0;i<16;i++){ 
+      const d = document.createElement('div'); 
+      d.className='cell-bg'; 
+      nextEl.appendChild(d);
+    }    
     if (!nextPiece) return;
-    nextPiece.blocks.forEach(b=>{
-      const r = b.y + 1; const c = b.x + 1; const idx = r*4 + c;
-      if (idx>=0 && idx<nextEl.children.length){
+    
+    // Calculate the bounding box of the piece
+    const xs = nextPiece.blocks.map(b => b.x);
+    const ys = nextPiece.blocks.map(b => b.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const width = maxX - minX + 1;
+    const height = maxY - minY + 1;
+    
+    // Calculate centering offsets
+    const offsetX = Math.floor((4 - width) / 2) - minX;
+    const offsetY = Math.floor((4 - height) / 2) - minY;
+    
+    nextPiece.blocks.forEach(b => {
+      const r = b.y + offsetY;
+      const c = b.x + offsetX;
+      const idx = r * 4 + c;
+      if (idx >= 0 && idx < nextEl.children.length){
         const el = nextEl.children[idx];
         el.className = '';
         el.style.borderRadius='8px';
-        el.textContent = b.v; el.style.fontWeight = 800; el.style.display='flex'; el.style.alignItems='center'; el.style.justifyContent='center';
+        el.textContent = b.v; 
+        el.style.fontWeight = 800; 
+        el.style.display='flex'; 
+        el.style.alignItems='center'; 
+        el.style.justifyContent='center';
         el.style.background = "#f1efe9";
         el.style.color = "black";
       }
@@ -1420,9 +1547,52 @@
 
   function hardDrop(){
     if (!current) return;
-    while(move(0,1, false)){}
-    playSound('drop'); // Воспроизводим звук падения
-    lockPiece();
+    
+    // Calculate final position
+    let finalY = current.y;
+    while (!collides(current.x, finalY + 1, current.blocks)) {
+      finalY++;
+    }
+    
+    // Calculate distance to fall
+    const distance = finalY - current.y;
+    
+    if (distance > 0) {
+      // Add falling class to current piece tiles
+      current.blocks.forEach((b, idx) => {
+        const id = `cur-${idx}`;
+        const el = tileLayer.querySelector(`[data-id='${id}']`);
+        if (el) {
+          el.classList.add('falling');
+        }
+      });
+      
+      // Move piece to final position
+      current.y = finalY;
+      draw();
+      
+      // Play drop sound with delay
+      setTimeout(() => {
+        playSound('drop');
+      }, 150); // Delay sound to match animation
+      
+      // Remove falling class after animation
+      setTimeout(() => {
+        current.blocks.forEach((b, idx) => {
+          const id = `cur-${idx}`;
+          const el = tileLayer.querySelector(`[data-id='${id}']`);
+          if (el) {
+            el.classList.remove('falling');
+          }
+        });
+        
+        // Lock piece after animation completes
+        lockPiece();
+      }, 200); // Match the CSS transition duration
+    } else {
+      // If no distance to fall, just lock the piece
+      lockPiece();
+    }
   }
 
   // Новая функция для проверки горизонтальных слияний
@@ -1614,13 +1784,24 @@
     return {anyMerged, anims};
   }
 
+  // Новая функция applyGravity с анимацией
   function applyGravity(){
+    const {cell,gap} = cellMetrics();
+    const movedTiles = [];
     let moved = false;
+    
+    // First pass: determine which tiles need to move and where
     for (let c=0;c<COLS;c++){
       let write = ROWS-1;
       for (let r=ROWS-1;r>=0;r--){
         if (grid[r][c]){
           if (r !== write){ 
+            // This tile needs to move
+            movedTiles.push({
+              from: {r, c},
+              to: {r: write, c},
+              val: grid[r][c]
+            });
             grid[write][c] = grid[r][c]; 
             grid[r][c] = 0; 
             moved = true;
@@ -1629,6 +1810,43 @@
         }
       }
     }
+    
+    // If tiles need to move, animate them
+    if (moved && movedTiles.length > 0) {
+      // Add falling class to all moving tiles
+      movedTiles.forEach(tile => {
+        const id = `g-${tile.from.r}-${tile.from.c}`;
+        const el = tileLayer.querySelector(`[data-id='${id}']`);
+        if (el) {
+          el.classList.add('falling');
+          // Update position
+          const left = tile.to.c*(cell+gap);
+          const top = tile.to.r*(cell+gap);
+          el.style.left = `${left}px`;
+          el.style.top = `${top}px`;
+          
+          // Update the tile's ID to match its new position
+          el.setAttribute('data-id', `g-${tile.to.r}-${tile.to.c}`);
+        }
+      });
+      
+      // Play drop sound with delay
+      setTimeout(() => {
+        playSound('drop');
+      }, 150); // Delay sound to match animation
+      
+      // Remove falling class after animation completes
+      setTimeout(() => {
+        movedTiles.forEach(tile => {
+          const id = `g-${tile.to.r}-${tile.to.c}`;
+          const el = tileLayer.querySelector(`[data-id='${id}']`);
+          if (el) {
+            el.classList.remove('falling');
+          }
+        });
+      }, 200); // Match the CSS transition duration
+    }
+    
     return moved;
   }
 
@@ -1765,7 +1983,7 @@
 
           // 4. Рекурсивно вызываем resolveBoard для проверки новых слияний, вызванных гравитацией.
           // Таймаут позволяет анимации гравитации быть видимой.
-          setTimeout(resolveBoard, 300); // 300ms для "установки" гравитации
+          setTimeout(resolveBoard, 300); // Увеличили таймаут до 500ms для анимации гравитации
         }, 500); // 500ms для анимации слияния
 
       } else {
@@ -1834,7 +2052,7 @@
         setTimeout(() => {
           performAllMerges();
         }, 300);
-      }, 500);
+      }, 300);
     } else {
       // Если горизонтальных слияний нет, сначала применяем гравитацию, затем запускаем полный процесс слияний.
       // comboChain уже равен 0, что правильно.
@@ -1842,7 +2060,7 @@
       draw();
       setTimeout(() => {
         performAllMerges();
-      }, 300);
+      }, 500);
     }
   }
 
@@ -1888,7 +2106,9 @@
       if (!settleTimer){
         // play drop sound only once when first contacting the floor/another tile
         if (!dropSoundPending){
-          playSound('drop');
+          setTimeout(() => {
+            playSound('drop');
+          }, 150); // Delay sound to match animation
           dropSoundPending = true;
         }
         settleTimer = setTimeout(()=>{ 
@@ -1913,6 +2133,7 @@
     tick = TICK_START; 
     paused = false; 
     leaderboardPaused = false;
+    userInitiatedPause = false; // Сбрасываем флаг пользовательской паузы
     current = null; 
     nextPiece = null; 
     justPlacedBlocks = []; // Очищаем список только что упавших блоков
@@ -2037,8 +2258,9 @@
   }
 
   // Функция для отображения/скрытия меню паузы
-  function togglePause() {
+  function togglePause(userInitiated = true) {
     paused = !paused;
+    userInitiatedPause = userInitiated; // Запоминаем, кто инициировал паузу
     
     if (paused) {
       // Stop gameplay
@@ -2051,8 +2273,22 @@
       pauseMenuEl.classList.add('show');
     } else {
       pauseMenuEl.classList.remove('show');
-      // Показываем рекламу при выходе из паузы
-      showAd(() => {
+      
+      // Показываем рекламу только если пауза была инициирована пользователем
+      if (userInitiatedPause) {
+        showAd(() => {
+          restartTimer();
+          
+          // Start gameplay
+          if (ysdk && ysdk.features.GameplayAPI) {
+            ysdk.features.GameplayAPI.start();
+          }
+          
+          // resume audio system (background music) if allowed
+          resumeAudioSystem();
+        });
+      } else {
+        // Если пауза системная, просто возобновляем игру без рекламы
         restartTimer();
         
         // Start gameplay
@@ -2060,9 +2296,8 @@
           ysdk.features.GameplayAPI.start();
         }
         
-        // resume audio system (background music) if allowed
         resumeAudioSystem();
-      });
+      }
     }
   }
 
@@ -2076,7 +2311,7 @@
     else if (e.code === 'Space'){ hardDrop(); e.preventDefault(); }
     else if (e.key.toLowerCase() === 'p' || e.key === 'Escape'){
       if (!leaderboardPaused) {
-        togglePause();
+        togglePause(true); // Пауза по клавише всегда пользовательская
       }
       e.preventDefault();
     }
@@ -2097,14 +2332,29 @@
   });
 
   // Pause button
-  pauseToggleEl.addEventListener('click', togglePause);
+  pauseToggleEl.addEventListener('click', () => {
+    togglePause(true); // Пауза по кнопке всегда пользовательская
+  });
 
   // Pause menu buttons
   resumeButtonEl.addEventListener('click', () => {
     paused = false;
     pauseMenuEl.classList.remove('show');
-    // Показываем рекламу при выходе из паузы
-    showAd(() => {
+    
+    // Показываем рекламу только если пауза была инициирована пользователем
+    if (userInitiatedPause) {
+      showAd(() => {
+        restartTimer();
+        
+        // Start gameplay
+        if (ysdk && ysdk.features.GameplayAPI) {
+          ysdk.features.GameplayAPI.start();
+        }
+        
+        resumeAudioSystem();
+      });
+    } else {
+      // Если пауза системная, просто возобновляем игру без рекламы
       restartTimer();
       
       // Start gameplay
@@ -2113,7 +2363,7 @@
       }
       
       resumeAudioSystem();
-    });
+    }
   });
 
   restartButtonEl.addEventListener('click', () => {
@@ -2182,25 +2432,44 @@
     leaderboardOverlayEl.classList.add('show');
   });
 
+  // Отслеживание видимости страницы
+  document.addEventListener('visibilitychange', () => {
+    pageVisible = !document.hidden;
+    
+    if (pageVisible) {
+      // Страница стала видимой
+      if (paused && gameStarted && !userInitiatedPause) {
+        // Если игра на паузе из-за переключения вкладки, возобновляем без рекламы
+        togglePause(false);
+      }
+    } else {
+      // Страница стала скрытой
+      if (gameStarted && !paused && !leaderboardPaused) {
+        // Если игра идет и не на паузе, ставим на паузу без рекламы
+        togglePause(false);
+      }
+    }
+  });
+
   // Initialize Yandex SDK
   initYandexSDK().then(() => {
     console.log('Yandex SDK initialized successfully');
     // Set up game pause/resume events
     ysdk.on('game_api_pause', () => {
       if (!paused && gameStarted && !leaderboardPaused) {
-        togglePause();
+        togglePause(false); // Системная пауза
       }
     });
     
     ysdk.on('game_api_resume', () => {
-      if (paused && gameStarted && !leaderboardPaused) {
-        togglePause();
+      if (paused && gameStarted && !leaderboardPaused && !userInitiatedPause) {
+        togglePause(false); // Системное возобновление
       }
     });
     
     // Start game loop for ads
     setInterval(() => {
-      if (gameStarted && !paused && !leaderboardPaused) {
+      if (gameStarted && !paused && !leaderboardPaused && pageVisible) {
         showAd();
       }
     }, AD_INTERVAL);
