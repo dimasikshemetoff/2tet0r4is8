@@ -2111,6 +2111,9 @@
     // Сбрасываем флаг мегакомбо при начале нового хода
     megaComboPlayed = false;
 
+    // ИСПРАВЛЕНИЕ: Всегда вызываем draw() после размещения фигуры
+    draw();
+
     const horizontalMerges = checkHorizontalMerges(justPlacedBlocks);
     let horizontalMergeAnims = [];
     
@@ -2136,10 +2139,17 @@
         });
       }, 300);
     } else {
-      applyGravity().then(() => {
-        setTimeout(() => {
+      // ИСПРАВЛЕНИЕ: Всегда применяем гравитацию с анимацией, даже если нет слияний
+      applyGravity().then((moved) => {
+        // Если были перемещения плиток, ждем завершения анимации
+        if (moved) {
+          setTimeout(() => {
+            performAllMerges();
+          }, 500);
+        } else {
+          // Если перемещений не было, сразу переходим к следующему шагу
           performAllMerges();
-        }, 500);
+        }
       });
     }
   }
