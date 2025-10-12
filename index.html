@@ -34,8 +34,8 @@
     .tile-el{position:absolute;width:var(--cell-size);height:var(--cell-size);display:flex;align-items:center;justify-content:center;border-radius:8px;font-weight:800;transition:transform 220ms cubic-bezier(.2,.9,.2,1), top 220ms cubic-bezier(.2,.9,.2,1), left 220ms cubic-bezier(.2,.9,.2,1);box-shadow:0 6px 18px rgba(2,6,23,0.6);pointer-events:none}
     .tile-el .label{transform:translateY(1px)}
     
-    /* gravity animation class */
-    .tile-el.falling{transition:top 200ms cubic-bezier(.2,.6,.3,1)}
+    /* ИСПРАВЛЕНО: правильная анимация падения с переопределением всех переходов */
+    .tile-el.falling{transition:transform 220ms cubic-bezier(.2,.9,.2,1), top 250ms cubic-bezier(.2,.6,.3,1), left 250ms cubic-bezier(.2,.6,.3,1) !important}
 
     /* merge animation */
     .merge-anim{animation:mergePop 320ms ease forwards}
@@ -56,6 +56,10 @@
     /* combo text */
     .combo{position:absolute;font-weight:900;color:#ffd86b;text-shadow:0 6px 18px rgba(0,0,0,0.6);pointer-events:none;opacity:0;transform:translateY(0);transition:transform 420ms cubic-bezier(.2,.9,.2,1),opacity 420ms;font-size:20px}
     .combo.show{opacity:1;transform:translateY(-36px) scale(1.05)}
+
+    /* combo text */
+    .combo-bonus{position:absolute;font-weight:900;color:#ff6b6b;text-shadow:0 6px 18px rgba(0,0,0,0.6);pointer-events:none;opacity:0;transform:translateY(0);transition:transform 420ms cubic-bezier(.2,.9,.2,1),opacity 420ms;font-size:18px}
+    .combo-bonus.show{opacity:1;transform:translateY(-36px) scale(1.05)}
 
     /* new record notification */
     .new-record{position:absolute;top:50%;left:50%;transform:translate(-50%, -50%);font-weight:900;color:#ffd86b;font-size:28px;text-shadow:0 6px 18px rgba(0,0,0,0.6);pointer-events:none;opacity:0;z-index:50;transition:transform 480ms cubic-bezier(.2,.9,.2,1),opacity 480ms}
@@ -398,6 +402,28 @@
       to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
     }
     
+    /* First place notification */
+    .first-place {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-weight: 900;
+      color: #ffd86b;
+      font-size: 28px;
+      text-shadow: 0 6px 18px rgba(0,0,0,0.6);
+      pointer-events: none;
+      opacity: 0;
+      z-index: 50;
+      transition: transform 480ms cubic-bezier(.2,.9,.2,1), opacity 480ms;
+      text-align: center;
+      width: 80%;
+    }
+    .first-place.show {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1.1);
+    }
+    
     /* Responsive adjustments */
     @media (max-width: 620px), (max-height: 615px) {
       .app {
@@ -448,7 +474,6 @@
         <button class="pause-button primary" id="resumeButton" data-i18n="pause.resume">Продолжить</button>
         <button class="pause-button" id="restartButton" data-i18n="pause.newGame">Новая игра</button>
         <button class="pause-button" id="soundButton" data-i18n="pause.sound">Звук: Вкл</button>
-        <button class="pause-button" id="leaderboardButton" data-i18n="pause.leaderboard">Таблица лидеров</button>
       </div>
     </div>
   </div>
@@ -490,6 +515,7 @@
       <button class="pause-toggle" id="pauseToggle" >⏸️</button>
       <div class="board" id="board" aria-label="Игровое поле">
         <div class="new-record" id="newRecord" data-i18n="game.newRecord">НОВЫЙ РЕКОРД!</div>
+        <div class="first-place" id="firstPlace" data-i18n="game.firstPlace">ВЫ ЛУЧШИЙ ИГРОК!</div>
       </div>
     </div>
   </div>
@@ -514,6 +540,7 @@
   const overlay = document.getElementById('overlay');
   const modal = document.getElementById('modal');
   const newRecordEl = document.getElementById('newRecord');
+  const firstPlaceEl = document.getElementById('firstPlace');
   const appEl = document.querySelector('.app');
   const soundToggleEl = document.getElementById('soundToggle');
   const pauseToggleEl = document.getElementById('pauseToggle');
@@ -523,7 +550,6 @@
   const resumeButtonEl = document.getElementById('resumeButton');
   const restartButtonEl = document.getElementById('restartButton');
   const soundButtonEl = document.getElementById('soundButton');
-  const leaderboardButtonEl = document.getElementById('leaderboardButton');
   const leaderboardOverlayEl = document.getElementById('leaderboardOverlay');
   const leaderboardContentEl = document.getElementById('leaderboardContent');
   const leaderboardCloseEl = document.getElementById('leaderboardClose');
@@ -542,6 +568,7 @@
   let tileLayer = null;
   let newRecordShown = false;
   let newRecordSoundPlayed = false;
+  let firstPlaceShown = false;
   let comboChain = 0;
   let justPlacedBlocks = [];
   let gameStarted = false;
@@ -560,6 +587,8 @@
   let adWarningActive = false;
   let dropSoundPending = false;
   let megaComboPlayed = false; // Флаг для отслеживания воспроизведения мегакомбо
+  let audioSuspended = false; // Флаг для отслеживания состояния аудио
+  let playerRank = null; // Ранг игрока в таблице лидеров
 
   // Yandex Games SDK variables
   let ysdk = null;
@@ -572,6 +601,7 @@
         description: "Соединяйте одинаковые плитки, чтобы создавать большие значения. Управляйте фигурами и создавайте комбо для получения дополнительных очков!",
         start: "Начать игру",
         newRecord: "НОВЫЙ РЕКОРД!",
+        firstPlace: "ВЫ ЛУЧШИЙ ИГРОК!",
         gameOver: "Конец игры",
         secondChance: "Второй шанс"
       },
@@ -607,7 +637,8 @@
         good: "Хорошо!",
         super: "Супер!",
         comboMaster: "КОМБО-МАСТЕР!",
-        classicCombo: "Классический комбо!"
+        classicCombo: "Классический комбо!",
+        megaCombo: "МЕГА КОМБО!"
       },
       ad: {
         warning: "Реклама через"
@@ -618,6 +649,7 @@
         description: "Connect identical tiles to create larger values. Control shapes and create combos for extra points!",
         start: "Start Game",
         newRecord: "NEW RECORD!",
+        firstPlace: "YOU ARE THE BEST PLAYER!",
         gameOver: "Game Over",
         secondChance: "Second Chance"
       },
@@ -653,7 +685,8 @@
         good: "Good!",
         super: "Super!",
         comboMaster: "COMBO MASTER!",
-        classicCombo: "Classic combo!"
+        classicCombo: "Classic combo!",
+        megaCombo: "MEGA COMBO!"
       },
       ad: {
         warning: "Ad in"
@@ -814,19 +847,21 @@
       lastAdTime = Date.now();
     }
     
+    // Всегда останавливаем звук перед показом рекламы
+    if (ysdk.features.GameplayAPI) {
+      ysdk.features.GameplayAPI.stop();
+    }
+    
+    if (timer) clearInterval(timer);
+    suspendAudioSystem();
+    
     if (isGameplayAd) {
       showAdWarning(() => {
-        if (ysdk.features.GameplayAPI) {
-          ysdk.features.GameplayAPI.stop();
-        }
-        
-        if (timer) clearInterval(timer);
-        suspendAudioSystem();
-        
         ysdk.adv.showFullscreenAdv({
           callbacks: {
             onClose: () => {
               console.log('Ad closed');
+              // Всегда восстанавливаем звук после закрытия рекламы
               if (!paused && gameStarted) {
                 if (ysdk.features.GameplayAPI) {
                   ysdk.features.GameplayAPI.start();
@@ -839,6 +874,7 @@
             },
             onError: (err) => {
               console.error('Ad error:', err);
+              // Всегда восстанавливаем звук при ошибке рекламы
               if (!paused && gameStarted) {
                 if (ysdk.features.GameplayAPI) {
                   ysdk.features.GameplayAPI.start();
@@ -853,17 +889,11 @@
         });
       });
     } else {
-      if (ysdk.features.GameplayAPI) {
-        ysdk.features.GameplayAPI.stop();
-      }
-      
-      if (timer) clearInterval(timer);
-      suspendAudioSystem();
-      
       ysdk.adv.showFullscreenAdv({
         callbacks: {
           onClose: () => {
             console.log('Ad closed');
+            // Всегда восстанавливаем звук после закрытия рекламы
             if (!paused && gameStarted) {
               if (ysdk.features.GameplayAPI) {
                 ysdk.features.GameplayAPI.start();
@@ -876,6 +906,7 @@
           },
           onError: (err) => {
             console.error('Ad error:', err);
+            // Всегда восстанавливаем звук при ошибке рекламы
             if (!paused && gameStarted) {
               if (ysdk.features.GameplayAPI) {
                 ysdk.features.GameplayAPI.start();
@@ -903,6 +934,7 @@
       return;
     }
     
+    // Всегда останавливаем звук перед показом рекламы
     if (ysdk.features.GameplayAPI) {
       ysdk.features.GameplayAPI.stop();
     }
@@ -912,13 +944,18 @@
     
     ysdk.adv.showRewardedVideo({
       callbacks: {
-        onOpen: () => console.log('Rewarded ad opened'),
+        onOpen: () => {
+          console.log('Rewarded ad opened');
+          // Дополнительно убеждаемся, что звук выключен при открытии рекламы
+          suspendAudioSystem();
+        },
         onRewarded: () => {
           console.log('Rewarded ad completed');
           if (callback) callback(true);
         },
         onClose: () => {
           console.log('Rewarded ad closed');
+          // Всегда восстанавливаем звук после закрытия рекламы
           if (!paused && gameStarted) {
             if (ysdk.features.GameplayAPI) {
               ysdk.features.GameplayAPI.start();
@@ -931,6 +968,7 @@
         },
         onError: (err) => {
           console.error('Rewarded ad error:', err);
+          // Всегда восстанавливаем звук при ошибке рекламы
           if (!paused && gameStarted) {
             if (ysdk.features.GameplayAPI) {
               ysdk.features.GameplayAPI.start();
@@ -972,7 +1010,8 @@
         })
       ]).then(([topEntries, playerEntry]) => {
         leaderboardData = topEntries.entries;
-        displayLeaderboard(leaderboardData, playerEntry ? playerEntry.rank : null);
+        playerRank = playerEntry ? playerEntry.rank : null;
+        displayLeaderboard(leaderboardData, playerRank);
       }).catch(err => {
         console.error('Error getting leaderboard:', err);
         showEmptyLeaderboard();
@@ -1094,6 +1133,9 @@
         })
         .then(() => {
           console.log('Score successfully updated in leaderboard:', score);
+          
+          // Проверяем, занял ли игрок первое место
+          checkFirstPlace();
         })
         .catch(err => {
           if (err.code === 'LEADERBOARD_PLAYER_NOT_PRESENT') {
@@ -1101,6 +1143,9 @@
             return ysdk.leaderboards.setScore('leaders', score)
               .then(() => {
                 console.log('Player added to leaderboard with score:', score);
+                
+                // Проверяем, занял ли игрок первое место
+                checkFirstPlace();
               });
           } else if (err.code === 'LEADERBOARD_TOO_MANY_REQUESTS') {
             console.log('Too many requests, retrying in 1 second');
@@ -1115,6 +1160,41 @@
     }).catch(err => {
       console.log('Error checking leaderboard availability:', err);
     });
+  }
+  
+  // Проверка, занял ли игрок первое место
+  function checkFirstPlace() {
+    if (!ysdk || !ysdk.leaderboards) {
+      return;
+    }
+    
+    return ysdk.leaderboards.getPlayerEntry('leaders')
+      .then(playerEntry => {
+        if (playerEntry && playerEntry.rank === 1 && !firstPlaceShown) {
+          showFirstPlace();
+          firstPlaceShown = true;
+        }
+      })
+      .catch(err => {
+        console.error('Error checking player rank:', err);
+      });
+  }
+  
+  // Показать уведомление о первом месте
+  function showFirstPlace() {
+    if (firstPlaceShown) return;
+    firstPlaceShown = true;
+    
+    if (!newRecordSoundPlayed) {
+      playSound('newrecord');
+      newRecordSoundPlayed = true;
+    }
+    
+    const firstPlaceEl = document.getElementById('firstPlace');
+    firstPlaceEl.classList.add('show');
+    setTimeout(() => {
+      firstPlaceEl.classList.remove('show');
+    }, 3000);
   }
 
   // Responsive scaling function
@@ -1190,7 +1270,7 @@
       .then(arrayBuffer => audioContext.decodeAudioData(arrayBuffer))
       .then(audioBuffer => {
         return () => {
-          if (!soundEnabled) return;
+          if (!soundEnabled || audioSuspended) return;
           if (audioContext.state === 'suspended') return;
           
           const source = audioContext.createBufferSource();
@@ -1223,7 +1303,7 @@
 
   // Воспроизведение звука
   function playSound(soundName) {
-    if (!soundEnabled) return;
+    if (!soundEnabled || audioSuspended) return;
     if (audioContext.state === 'suspended') return;
     if (sounds[soundName]) {
       try { sounds[soundName](); } catch(e){ /* ignore */ }
@@ -1232,7 +1312,7 @@
   
   // Воспроизведение фоновой музыки в цикле
   function playBackgroundMusic() {
-    if (!soundEnabled) return;
+    if (!soundEnabled || audioSuspended) return;
     if (audioContext.state === 'suspended') return;
     stopBackgroundMusic();
     if (!sounds.backgroundBuffer) {
@@ -1282,10 +1362,10 @@
     if (soundEnabled) {
       if (audioContext.state === 'suspended') {
         audioContext.resume().then(()=>{
-          if (!paused && gameStarted) playBackgroundMusic();
+          if (!paused && gameStarted && !audioSuspended) playBackgroundMusic();
         });
       } else {
-        if (!paused && gameStarted) playBackgroundMusic();
+        if (!paused && gameStarted && !audioSuspended) playBackgroundMusic();
       }
     } else {
       stopBackgroundMusic();
@@ -1294,17 +1374,30 @@
   
   // Остановить всё аудио (используется при паузе)
   function suspendAudioSystem() {
+    audioSuspended = true;
     stopBackgroundMusic();
     if (audioContext && audioContext.state === 'running') {
-      audioContext.suspend().catch(()=>{});
+      audioContext.suspend().catch((err) => {
+        console.warn('Error suspending audio context:', err);
+      });
     }
   }
+  
   // Восстановить аудио после паузы
   function resumeAudioSystem() {
+    audioSuspended = false;
     if (audioContext && audioContext.state === 'suspended') {
-      audioContext.resume().then(()=>{ if (soundEnabled && gameStarted) playBackgroundMusic(); }).catch(()=>{});
+      audioContext.resume().then(()=>{
+        if (soundEnabled && gameStarted && !paused) {
+          playBackgroundMusic();
+        }
+      }).catch((err) => {
+        console.warn('Error resuming audio context:', err);
+      });
     } else {
-      if (soundEnabled && gameStarted) playBackgroundMusic();
+      if (soundEnabled && gameStarted && !paused) {
+        playBackgroundMusic();
+      }
     }
   }
 
@@ -1330,7 +1423,7 @@
   function createBoard(){
     boardEl.style.setProperty('--cols', COLS);
     boardEl.style.setProperty('--rows', ROWS);
-    boardEl.innerHTML = `<div class="new-record" id="newRecord">${t('game.newRecord')}</div>`;
+    boardEl.innerHTML = `<div class="new-record" id="newRecord">${t('game.newRecord')}</div><div class="first-place" id="firstPlace">${t('game.firstPlace')}</div>`;
     for (let r=0;r<ROWS;r++){
       for (let c=0;c<COLS;c++){
         const bg = document.createElement('div');
@@ -1549,7 +1642,7 @@
       
       setTimeout(() => {
         playSound('drop');
-      }, 150);
+      }, 100);
       
       setTimeout(() => {
         current.blocks.forEach((b, idx) => {
@@ -1561,7 +1654,7 @@
         });
         
         lockPiece();
-      }, 200);
+      }, 250);
     } else {
       lockPiece();
     }
@@ -1601,8 +1694,18 @@
         }
       }
       
+      // Обрабатываем компоненты с 2 или более плитками
       if (component.length >= 2) {
-        mergedCells.push(component);
+        let mergeCount = component.length;
+        
+        // Если количество плиток нечетное, объединяем только (component.length - 1) плиток
+        if (component.length % 2 !== 0) {
+          mergeCount = component.length - 1;
+        }
+        
+        if (mergeCount >= 2) {
+          mergedCells.push(component.slice(0, mergeCount));
+        }
       }
     }
     
@@ -1618,12 +1721,8 @@
       
       const val = grid[component[0][0]][component[0][1]];
       
-      let multiplier;
-      if (component.length === 2) multiplier = 2;
-      else if (component.length === 3) multiplier = 2;
-      else multiplier = 4;
-      
-      const mergedVal = val * multiplier;
+      // ИСПРАВЛЕНО: новая формула для слияния
+      const mergedVal = val * component.length;
       
       // Находим ячейку, которая была на поле до падения фигуры
       let targetCell = null;
@@ -1637,6 +1736,8 @@
       
       // Если все ячейки из упавшей фигуры, выбираем центральную
       if (!targetCell) {
+        // Для горизонтального слияния выбираем центральную ячейку
+        component.sort((a, b) => a[1] - b[1]); // Сортируем по колонке
         const centerIndex = Math.floor(component.length / 2);
         targetCell = component[centerIndex];
       }
@@ -1666,7 +1767,7 @@
     const anims = [];
     const visited = Array.from({length:ROWS},()=>Array(COLS).fill(false));
     
-    const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+    const dirs = [[1,0],[-1,0],[0,1],[0,-1]]; // Сначала вертикальные направления
 
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
@@ -1696,15 +1797,19 @@
           if (!intersects) continue;
         }
 
+        // Обрабатываем компоненты с 2 или более плитками
         if (component.length >= 2){
           anyMerged = true;
 
-          let multiplier;
-          if (component.length === 2) multiplier = 2;
-          else if (component.length === 3) multiplier = 2;
-          else multiplier = 4;
+          let mergeCount = component.length;
+          
+          // Если количество плиток нечетное, объединяем только (component.length - 1) плиток
+          if (component.length % 2 !== 0) {
+            mergeCount = component.length - 1;
+          }
 
-          const mergedVal = val * multiplier;
+          // ИСПРАВЛЕНО: новая формула для слияния
+          const mergedVal = val * mergeCount;
 
           // Находим ячейку, которая была на поле до падения фигуры
           let targetCell = null;
@@ -1716,38 +1821,37 @@
             }
           }
           
-          // Если все ячейки из упавшей фигуры, выбираем центральную
+          // Если все ячейки из упавшей фигуры, выбираем целевую ячейку
           if (!targetCell) {
-            const neighborCounts = component.map(([cr,cc])=>{
-              let count = 0;
-              for (const [dr,dc] of dirs){
-                const nr = cr + dr, nc = cc + dc;
-                if (nr<0||nr>=ROWS||nc<0||nc>=COLS) continue;
-                if (grid[nr][nc] && !component.some(p => p[0]===nr && p[1]===nc)) count++;
-              }
-              return count;
-            });
-
-            let bestIdx = 0;
-            for (let i=1;i<component.length;i++){
-              if (neighborCounts[i] > neighborCounts[bestIdx]) bestIdx = i;
-              else if (neighborCounts[i] === neighborCounts[bestIdx]){
-                if (component[i][0] < component[bestIdx][0]) bestIdx = i;
-                else if (component[i][0] === component[bestIdx][0]){
-                  const centerCol = Math.floor(COLS/2);
-                  const distI = Math.abs(component[i][1] - centerCol);
-                  const distB = Math.abs(component[bestIdx][1] - centerCol);
-                  if (distI < distB) bestIdx = i;
-                }
+            // Для слияния двух плиток выбираем нижнюю ячейку
+            if (mergeCount === 2) {
+              component.sort((a, b) => b[0] - a[0]); // Сортируем по убыванию строки
+              targetCell = component[0]; // Берем самую нижнюю
+            } else {
+              // Для других случаев выбираем самую нижнюю ячейку
+              component.sort((a, b) => b[0] - a[0]); // Сортируем по убыванию строки
+              
+              // Если есть несколько ячеек в одной строке, выбираем центральную по колонке
+              const bottomRow = component[0][0];
+              const bottomRowCells = component.filter(cell => cell[0] === bottomRow);
+              
+              if (bottomRowCells.length > 1) {
+                bottomRowCells.sort((a, b) => a[1] - b[1]); // Сортируем по колонке
+                const centerIndex = Math.floor(bottomRowCells.length / 2);
+                targetCell = bottomRowCells[centerIndex];
+              } else {
+                targetCell = component[0];
               }
             }
-            
-            targetCell = component[bestIdx];
           }
           
           const [mr, mc] = targetCell;
 
-          for (const [cr, cc] of component) grid[cr][cc] = 0;
+          // Очищаем только те ячейки, которые участвуют в слиянии
+          const cellsToMerge = component.slice(0, mergeCount);
+          for (const [cr, cc] of cellsToMerge) {
+            grid[cr][cc] = 0;
+          }
 
           grid[mr][mc] = mergedVal;
 
@@ -1755,7 +1859,7 @@
           score += Math.floor(mergedVal * comboMultiplier);
           updateScoreAndLevel();
 
-          anims.push({r: mr, c: mc, val: mergedVal, size: component.length});
+          anims.push({r: mr, c: mc, val: mergedVal, size: mergeCount});
           playSound('merge');
         }
       }
@@ -1764,62 +1868,65 @@
     return {anyMerged, anims};
   }
 
-  // Новая функция applyGravity с анимацией
+  // ИСПРАВЛЕННАЯ функция applyGravity с анимацией
   function applyGravity(){
-    const {cell,gap} = cellMetrics();
-    const movedTiles = [];
-    let moved = false;
-    
-    for (let c=0;c<COLS;c++){
-      let write = ROWS-1;
-      for (let r=ROWS-1;r>=0;r--){
-        if (grid[r][c]){
-          if (r !== write){ 
-            movedTiles.push({
-              from: {r, c},
-              to: {r: write, c},
-              val: grid[r][c]
-            });
-            grid[write][c] = grid[r][c]; 
-            grid[r][c] = 0; 
-            moved = true;
+    return new Promise((resolve) => {
+      const {cell,gap} = cellMetrics();
+      const movedTiles = [];
+      let moved = false;
+      
+      for (let c=0;c<COLS;c++){
+        let write = ROWS-1;
+        for (let r=ROWS-1;r>=0;r--){
+          if (grid[r][c]){
+            if (r !== write){ 
+              movedTiles.push({
+                from: {r, c},
+                to: {r: write, c},
+                val: grid[r][c]
+              });
+              grid[write][c] = grid[r][c]; 
+              grid[r][c] = 0; 
+              moved = true;
+            }
+            write--;
           }
-          write--;
         }
       }
-    }
-    
-    if (moved && movedTiles.length > 0) {
-      movedTiles.forEach(tile => {
-        const id = `g-${tile.from.r}-${tile.from.c}`;
-        const el = tileLayer.querySelector(`[data-id='${id}']`);
-        if (el) {
-          el.classList.add('falling');
-          const left = tile.to.c*(cell+gap);
-          const top = tile.to.r*(cell+gap);
-          el.style.left = `${left}px`;
-          el.style.top = `${top}px`;
-          
-          el.setAttribute('data-id', `g-${tile.to.r}-${tile.to.c}`);
-        }
-      });
       
-      setTimeout(() => {
-        playSound('drop');
-      }, 150);
-      
-      setTimeout(() => {
+      if (moved && movedTiles.length > 0) {
         movedTiles.forEach(tile => {
-          const id = `g-${tile.to.r}-${tile.to.c}`;
+          const id = `g-${tile.from.r}-${tile.from.c}`;
           const el = tileLayer.querySelector(`[data-id='${id}']`);
           if (el) {
-            el.classList.remove('falling');
+            el.classList.add('falling');
+            const left = tile.to.c*(cell+gap);
+            const top = tile.to.r*(cell+gap);
+            el.style.left = `${left}px`;
+            el.style.top = `${top}px`;
+            
+            el.setAttribute('data-id', `g-${tile.to.r}-${tile.to.c}`);
           }
         });
-      }, 200);
-    }
-    
-    return moved;
+        
+        setTimeout(() => {
+          playSound('drop');
+        }, 100);
+        
+        setTimeout(() => {
+          movedTiles.forEach(tile => {
+            const id = `g-${tile.to.r}-${tile.to.c}`;
+            const el = tileLayer.querySelector(`[data-id='${id}']`);
+            if (el) {
+              el.classList.remove('falling');
+            }
+          });
+          resolve(moved);
+        }, 250);
+      } else {
+        resolve(moved);
+      }
+    });
   }
 
   // animate merges: pop, spawn particles, show praise
@@ -1865,7 +1972,7 @@
     if (val >= 512) return t('praise.amazing');
     if (val >= 128) return t('praise.excellent');
     if (size >= 4) return t('praise.great');
-    if (size >= 3) return t('praise.good');
+    if (size >= 2) return t('praise.good');
     return t('praise.super');
   }
 
@@ -1894,6 +2001,29 @@
     tileLayer.appendChild(p);
     requestAnimationFrame(()=>{ p.classList.add('show'); });
     setTimeout(()=>{ p.classList.remove('show'); setTimeout(()=>p.remove(),400); }, 1000);
+    
+    // Добавляем бонусные очки за комбо x2 и выше
+    let bonusPoints = 0;
+    if (count === 2) bonusPoints = 40;
+    else if (count === 3) bonusPoints = 80;
+    else if (count === 4) bonusPoints = 160;
+    else if (count === 5) bonusPoints = 300;
+    else if (count >= 6) bonusPoints = 500;
+    
+    if (bonusPoints > 0) {
+      score += bonusPoints;
+      updateScoreAndLevel();
+      
+      // Показываем бонус
+      const bonus = document.createElement('div');
+      bonus.className = 'combo-bonus';
+      bonus.textContent = `+${bonusPoints}`;
+      bonus.style.left = `${x}px`;
+      bonus.style.top = `${y - 50}px`;
+      tileLayer.appendChild(bonus);
+      requestAnimationFrame(()=>{ bonus.classList.add('show'); });
+      setTimeout(()=>{ bonus.classList.remove('show'); setTimeout(()=>bonus.remove(),400); }, 1000);
+    }
   }
 
   function showNewRecord() {
@@ -1931,9 +2061,9 @@
         }
 
         setTimeout(() => {
-          const gravityMoved = applyGravity();
-          draw();
-          setTimeout(resolveBoard, 300);
+          applyGravity().then(() => {
+            setTimeout(resolveBoard, 300);
+          });
         }, 500);
 
       } else {
@@ -1999,18 +2129,18 @@
       }
       
       setTimeout(() => {
-        const gravityMoved = applyGravity();
-        draw();
-        setTimeout(() => {
-          performAllMerges();
-        }, 300);
+        applyGravity().then(() => {
+          setTimeout(() => {
+            performAllMerges();
+          }, 300);
+        });
       }, 300);
     } else {
-      const gravityMoved = applyGravity();
-      draw();
-      setTimeout(() => {
-        performAllMerges();
-      }, 500);
+      applyGravity().then(() => {
+        setTimeout(() => {
+          performAllMerges();
+        }, 500);
+      });
     }
   }
 
@@ -2082,6 +2212,7 @@
     justPlacedBlocks = [];
     newRecordShown = false;
     newRecordSoundPlayed = false;
+    firstPlaceShown = false;
     comboChain = 0;
     currentBest = best;
     secondChanceUsed = false;
@@ -2121,21 +2252,22 @@
           }
         }
         
-        applyGravity();
-        draw();
-        overlay.classList.remove('show');
-        gameStarted = true;
-        
-        if (ysdk && ysdk.features.GameplayAPI) {
-          ysdk.features.GameplayAPI.start();
-        }
-        
-        if (soundEnabled) {
-          resumeAudioSystem();
-        }
-        
-        restartTimer();
-        spawnNext();
+        applyGravity().then(() => {
+          draw();
+          overlay.classList.remove('show');
+          gameStarted = true;
+          
+          if (ysdk && ysdk.features.GameplayAPI) {
+            ysdk.features.GameplayAPI.start();
+          }
+          
+          if (soundEnabled) {
+            resumeAudioSystem();
+          }
+          
+          restartTimer();
+          spawnNext();
+        });
       }
     });
   }
@@ -2294,38 +2426,6 @@
     toggleSound();
   });
 
-  // Leaderboard button
-  leaderboardButtonEl.addEventListener('click', () => {
-    pauseMenuEl.classList.remove('show');
-    
-    leaderboardPaused = true;
-    
-    if (ysdk && ysdk.features.GameplayAPI) {
-      ysdk.features.GameplayAPI.stop();
-    }
-    
-    if (timer) clearInterval(timer);
-    suspendAudioSystem();
-    
-    loadLeaderboard();
-    leaderboardOverlayEl.classList.add('show');
-  });
-
-  leaderboardCloseEl.addEventListener('click', () => {
-    leaderboardOverlayEl.classList.remove('show');
-    
-    leaderboardPaused = false;
-    
-    showAd(() => {
-      if (ysdk && ysdk.features.GameplayAPI) {
-        ysdk.features.GameplayAPI.start();
-      }
-      
-      restartTimer();
-      resumeAudioSystem();
-    }, false);
-  });
-
   // Leaderboard button in side panel
   document.getElementById('leaderboard').addEventListener('click', () => {
     leaderboardPaused = true;
@@ -2341,18 +2441,65 @@
     leaderboardOverlayEl.classList.add('show');
   });
 
-  // Отслеживание видимости страницы
+  // ИСПРАВЛЕНО: Функция закрытия таблицы лидеров
+  leaderboardCloseEl.addEventListener('click', () => {
+    leaderboardOverlayEl.classList.remove('show');
+    
+    // Восстанавливаем состояние игры после закрытия таблицы лидеров
+    leaderboardPaused = false;
+    
+    // Восстанавливаем игру без рекламы
+    if (gameStarted && !paused) {
+      if (ysdk && ysdk.features.GameplayAPI) {
+        ysdk.features.GameplayAPI.start();
+      }
+      
+      restartTimer();
+      resumeAudioSystem();
+    } else if (gameStarted && paused) {
+      // Если игра была на паузе, просто восстанавливаем состояние
+      if (ysdk && ysdk.features.GameplayAPI) {
+        ysdk.features.GameplayAPI.start();
+      }
+      
+      resumeAudioSystem();
+    }
+  });
+
+  // Отслеживание видимости страницы - исправлено
   document.addEventListener('visibilitychange', () => {
     pageVisible = !document.hidden;
     
-    if (pageVisible) {
-      if (paused && gameStarted && !userInitiatedPause) {
-        togglePause(false);
-      }
-    } else {
+    if (!pageVisible) {
+      // При уходе со страницы всегда приостанавливаем звук
+      suspendAudioSystem();
+      
+      // Если игра активна, ставим на паузу
       if (gameStarted && !paused && !leaderboardPaused) {
         togglePause(false);
       }
+    } else {
+      // При возврате на страницу
+      if (gameStarted && paused && !userInitiatedPause && !leaderboardPaused) {
+        // Если игра на паузе из-за скрытия страницы, возобновляем
+        togglePause(false);
+      } else if (gameStarted && !paused && !leaderboardPaused) {
+        // Если игра активна, восстанавливаем звук
+        resumeAudioSystem();
+      }
+    }
+  });
+  
+  // Дополнительный обработчик для переключения вкладок (pagehide/pageshow)
+  window.addEventListener('pagehide', () => {
+    // При скрытии страницы (включая переключение вкладок) всегда выключаем звук
+    suspendAudioSystem();
+  });
+  
+  window.addEventListener('pageshow', () => {
+    // При показе страницы восстанавливаем звук, если игра активна
+    if (gameStarted && !paused && !leaderboardPaused) {
+      resumeAudioSystem();
     }
   });
 
